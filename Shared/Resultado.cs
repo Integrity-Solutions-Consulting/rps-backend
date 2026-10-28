@@ -7,13 +7,19 @@ public enum TipoError
     Conflicto
 }
 
-public record Error(TipoError Tipo, string Mensaje, string? Campo = null)
+// Error genérico. Cada feature define sus errores concretos en su propio catálogo
+// (ej. ColaboradorErrores) usando estas fábricas.
+// Codigo es estable (ej. "Colaborador.Desactivado") para que el frontend no dependa del texto del mensaje.
+public record Error(TipoError Tipo, string Codigo, string Mensaje, string? Campo = null)
 {
-    public static Error NoEncontrado(string mensaje) => new(TipoError.NoEncontrado, mensaje);
+    public static Error NoEncontrado(string codigo, string mensaje) =>
+        new(TipoError.NoEncontrado, codigo, mensaje);
 
-    public static Error Validacion(string campo, string mensaje) => new(TipoError.Validacion, mensaje, campo);
+    public static Error Validacion(string codigo, string campo, string mensaje) =>
+        new(TipoError.Validacion, codigo, mensaje, campo);
 
-    public static Error Conflicto(string mensaje) => new(TipoError.Conflicto, mensaje);
+    public static Error Conflicto(string codigo, string mensaje) =>
+        new(TipoError.Conflicto, codigo, mensaje);
 }
 
 // Lo que devuelven los servicios de Application: un valor o un error, sin saber nada de HTTP.

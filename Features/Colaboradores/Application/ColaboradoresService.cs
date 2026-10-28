@@ -30,7 +30,7 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     {
         var colaborador = await db.ColaboradoresRps.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
         if (colaborador is null)
-            return NoEncontrado(id);
+            return ColaboradorErrores.NoEncontrado(id);
 
         return await ConstruirDetalleAsync(colaborador, ct);
     }
@@ -39,10 +39,10 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     {
         var tmrColaboradorId = request.TmrColaboradorId?.Trim();
         if (string.IsNullOrEmpty(tmrColaboradorId) || tmrColaboradorId.Length > 50)
-            return Error.Validacion("tmrColaboradorId", "Es obligatorio y debe tener máximo 50 caracteres.");
+            return ColaboradorErrores.TmrIdInvalido;
 
         if (await db.ColaboradoresRps.AnyAsync(c => c.TmrColaboradorId == tmrColaboradorId, ct))
-            return Error.Conflicto($"Ya existe un colaborador con TmrColaboradorId '{tmrColaboradorId}'.");
+            return ColaboradorErrores.TmrDuplicado(tmrColaboradorId);
 
         // Un colaborador nuevo siempre empieza Pendiente: aún no tiene frecuencia ni cuenta.
         var colaborador = new ColaboradorRps
@@ -62,10 +62,10 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     {
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (colaborador is null)
-            return NoEncontrado(id);
+            return ColaboradorErrores.NoEncontrado(id);
 
         if (!colaborador.Activo)
-            return Desactivado();
+            return ColaboradorErrores.Desactivado;
 
         colaborador.Clasificacion = request.Clasificacion;
         await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
@@ -79,7 +79,7 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     {
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (colaborador is null)
-            return NoEncontrado(id);
+            return ColaboradorErrores.NoEncontrado(id);
 
         if (colaborador.Activo != activo)
         {
@@ -94,7 +94,7 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     public async Task<Resultado<List<FrecuenciaResponse>>> ListarFrecuenciasAsync(Guid id, CancellationToken ct)
     {
         if (!await db.ColaboradoresRps.AnyAsync(c => c.Id == id, ct))
-            return NoEncontrado(id);
+            return ColaboradorErrores.NoEncontrado(id);
 
         return await db.ColaboradoresFrecuencia.AsNoTracking()
             .Where(f => f.ColaboradorId == id)
@@ -107,20 +107,20 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         Guid id, RegistrarFrecuenciaRequest request, CancellationToken ct)
     {
         if (request.Frecuencia is null)
-            return Error.Validacion("frecuencia", "Es obligatoria (DosPagos o FinDeMes).");
+            return ColaboradorErrores.FrecuenciaRequerida;
 
         if (request.VigenteDesdeMes is not { Day: 1 } vigenteDesdeMes)
-            return Error.Validacion("vigenteDesdeMes", "Es obligatoria y debe ser el primer día del mes (ej. 2026-11-01).");
+            return ColaboradorErrores.VigenteDesdeMesInvalido;
 
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (colaborador is null)
-            return NoEncontrado(id);
+            return ColaboradorErrores.NoEncontrado(id);
 
         if (!colaborador.Activo)
-            return Desactivado();
+            return ColaboradorErrores.Desactivado;
 
         if (await db.ColaboradoresFrecuencia.AnyAsync(f => f.ColaboradorId == id && f.VigenteDesdeMes == vigenteDesdeMes, ct))
-            return Error.Conflicto($"El colaborador ya tiene una frecuencia registrada desde {vigenteDesdeMes:yyyy-MM-dd}.");
+            return ColaboradorErrores.FrecuenciaDuplicada(vigenteDesdeMes);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -147,22 +147,22 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     {
         var numeroCuenta = request.NumeroCuenta?.Trim();
         if (string.IsNullOrEmpty(numeroCuenta) || numeroCuenta.Length > 30 || !numeroCuenta.All(char.IsAsciiDigit))
-            return Error.Validacion("numeroCuenta", "Es obligatorio, solo dígitos y máximo 30 caracteres.");
+            return ColaboradorErrores.NumeroCuentaInvalido;
 
         var banco = request.Banco?.Trim();
         if (banco?.Length > 100)
-            return Error.Validacion("banco", "Debe tener máximo 100 caracteres.");
+            return ColaboradorErrores.BancoInvalido;
 
         var tipoCuenta = request.TipoCuenta?.Trim();
         if (tipoCuenta?.Length > 20)
-            return Error.Validacion("tipoCuenta", "Debe tener máximo 20 caracteres.");
+            return ColaboradorErrores.TipoCuentaInvalido;
 
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (colaborador is null)
-            return NoEncontrado(id);
+            return ColaboradorErrores.NoEncontrado(id);
 
         if (!colaborador.Activo)
-            return Desactivado();
+            return ColaboradorErrores.Desactivado;
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -221,10 +221,4 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
     private CuentaBancariaResponse ACuentaResponse(CuentaBancaria cuenta) =>
         new(cuenta.Id, cuenta.Banco, cuenta.TipoCuenta, protector.Enmascarar(cuenta.NumeroCuentaCifrado));
-
-    private static Error NoEncontrado(Guid id) =>
-        Error.NoEncontrado($"No existe un colaborador con id '{id}'.");
-
-    private static Error Desactivado() =>
-        Error.Conflicto("El colaborador está desactivado. Actívalo antes de modificar su configuración.");
 }
