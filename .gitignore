@@ -1,0 +1,50 @@
+# ===== Build de .NET =====
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+*.pdb
+
+# ===== Visual Studio / IDEs =====
+.vs/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+.vscode/
+.idea/
+*.swp
+
+# ===== Variables de entorno / secretos =====
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+*.pfx
+*.key
+
+# ===== Bases de datos locales =====
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== Tests / cobertura =====
+TestResults/
+[Tt]est[Rr]esult*/
+coverage*/
+*.coverage
+*.trx
+
+# ===== NuGet =====
+*.nupkg
+packages/
+
+# ===== Logs =====
+logs/
+*.log
+
+# ===== Sistema operativo =====
+Thumbs.db
+Desktop.ini
+.DS_Store
