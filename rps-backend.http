@@ -45,6 +45,19 @@ Content-Type: application/json
   "vigenteDesdeMes": "2026-10-01"
 }
 
+### Editar frecuencia (solo de meses que aún no empiezan)
+@frecuenciaId = REEMPLAZAR-CON-ID
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/frecuencias/{{frecuenciaId}}
+Content-Type: application/json
+
+{
+  "frecuencia": "FinDeMes",
+  "vigenteDesdeMes": "2026-11-01"
+}
+
+### Eliminar frecuencia (solo de meses que aún no empiezan)
+DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/frecuencias/{{frecuenciaId}}
+
 ### Registrar / reemplazar cuenta bancaria
 PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/cuenta-bancaria
 Content-Type: application/json

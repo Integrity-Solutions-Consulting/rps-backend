@@ -10,6 +10,9 @@ public static class ColaboradorErrores
     public static Error NoEncontrado(Guid id) =>
         Error.NoEncontrado("Colaborador.NoEncontrado", $"No existe un colaborador con id '{id}'.");
 
+    public static Error FrecuenciaNoEncontrada(Guid frecuenciaId) =>
+        Error.NoEncontrado("Colaborador.FrecuenciaNoEncontrada", $"El colaborador no tiene una frecuencia con id '{frecuenciaId}'.");
+
     // ===== Conflictos =====
 
     public static Error TmrDuplicado(string tmrColaboradorId) =>
@@ -21,6 +24,9 @@ public static class ColaboradorErrores
     public static Error FrecuenciaDuplicada(DateOnly vigenteDesdeMes) =>
         Error.Conflicto("Colaborador.FrecuenciaDuplicada", $"El colaborador ya tiene una frecuencia registrada desde {vigenteDesdeMes:yyyy-MM-dd}.");
 
+    public static readonly Error FrecuenciaNoModificable =
+        Error.Conflicto("Colaborador.FrecuenciaNoModificable", "Solo se pueden editar o eliminar frecuencias de meses que aún no empiezan.");
+
     // ===== Validaciones =====
 
     public static readonly Error TmrIdInvalido =
@@ -31,6 +37,9 @@ public static class ColaboradorErrores
 
     public static readonly Error VigenteDesdeMesInvalido =
         Error.Validacion("Colaborador.VigenteDesdeMesInvalido", "vigenteDesdeMes", "Es obligatoria y debe ser el primer día del mes (ej. 2026-11-01).");
+
+    public static readonly Error VigenteDesdeMesNoFuturo =
+        Error.Validacion("Colaborador.VigenteDesdeMesNoFuturo", "vigenteDesdeMes", "Al editar, el nuevo mes debe ser posterior al mes actual.");
 
     public static readonly Error NumeroCuentaInvalido =
         Error.Validacion("Colaborador.NumeroCuentaInvalido", "numeroCuenta", "Es obligatorio, solo dígitos y máximo 30 caracteres.");

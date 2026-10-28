@@ -141,6 +141,76 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         return new FrecuenciaResponse(frecuencia.Id, frecuencia.Frecuencia, frecuencia.VigenteDesdeMes);
     }
 
+    // Solo se pueden corregir frecuencias de meses que aún no empiezan:
+    // las del mes actual o pasados pueden haberse usado ya para calcular pagos.
+    public async Task<Resultado<FrecuenciaResponse>> EditarFrecuenciaAsync(
+        Guid id, Guid frecuenciaId, RegistrarFrecuenciaRequest request, CancellationToken ct)
+    {
+        if (request.Frecuencia is null)
+            return ColaboradorErrores.FrecuenciaRequerida;
+
+        if (request.VigenteDesdeMes is not { Day: 1 } vigenteDesdeMes)
+            return ColaboradorErrores.VigenteDesdeMesInvalido;
+
+        if (vigenteDesdeMes <= MesActual())
+            return ColaboradorErrores.VigenteDesdeMesNoFuturo;
+
+        var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (colaborador is null)
+            return ColaboradorErrores.NoEncontrado(id);
+
+        if (!colaborador.Activo)
+            return ColaboradorErrores.Desactivado;
+
+        var frecuencia = await db.ColaboradoresFrecuencia.FirstOrDefaultAsync(f => f.Id == frecuenciaId && f.ColaboradorId == id, ct);
+        if (frecuencia is null)
+            return ColaboradorErrores.FrecuenciaNoEncontrada(frecuenciaId);
+
+        if (frecuencia.VigenteDesdeMes <= MesActual())
+            return ColaboradorErrores.FrecuenciaNoModificable;
+
+        if (await db.ColaboradoresFrecuencia.AnyAsync(
+                f => f.ColaboradorId == id && f.VigenteDesdeMes == vigenteDesdeMes && f.Id != frecuenciaId, ct))
+            return ColaboradorErrores.FrecuenciaDuplicada(vigenteDesdeMes);
+
+        frecuencia.Frecuencia = request.Frecuencia.Value;
+        frecuencia.VigenteDesdeMes = vigenteDesdeMes;
+        colaborador.ActualizadoEn = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return new FrecuenciaResponse(frecuencia.Id, frecuencia.Frecuencia, frecuencia.VigenteDesdeMes);
+    }
+
+    public async Task<Resultado<bool>> EliminarFrecuenciaAsync(Guid id, Guid frecuenciaId, CancellationToken ct)
+    {
+        var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
+        if (colaborador is null)
+            return ColaboradorErrores.NoEncontrado(id);
+
+        if (!colaborador.Activo)
+            return ColaboradorErrores.Desactivado;
+
+        var frecuencia = await db.ColaboradoresFrecuencia.FirstOrDefaultAsync(f => f.Id == frecuenciaId && f.ColaboradorId == id, ct);
+        if (frecuencia is null)
+            return ColaboradorErrores.FrecuenciaNoEncontrada(frecuenciaId);
+
+        if (frecuencia.VigenteDesdeMes <= MesActual())
+            return ColaboradorErrores.FrecuenciaNoModificable;
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        db.ColaboradoresFrecuencia.Remove(frecuencia);
+        await db.SaveChangesAsync(ct);
+
+        // Si era su única frecuencia, el colaborador vuelve a Pendiente.
+        await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
+        await db.SaveChangesAsync(ct);
+
+        await tx.CommitAsync(ct);
+
+        return true;
+    }
+
     // Reemplaza la cuenta activa: la anterior queda con Activa = false como historial.
     public async Task<Resultado<CuentaBancariaResponse>> RegistrarCuentaBancariaAsync(
         Guid id, RegistrarCuentaBancariaRequest request, CancellationToken ct)
@@ -194,8 +264,7 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
     private async Task<ColaboradorDetalleResponse> ConstruirDetalleAsync(ColaboradorRps colaborador, CancellationToken ct)
     {
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
+        var mesActual = MesActual();
 
         // Vigente = la más reciente que ya empezó (las de meses futuros no cuentan todavía).
         var frecuenciaVigente = await db.ColaboradoresFrecuencia.AsNoTracking()
@@ -221,4 +290,10 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
     private CuentaBancariaResponse ACuentaResponse(CuentaBancaria cuenta) =>
         new(cuenta.Id, cuenta.Banco, cuenta.TipoCuenta, protector.Enmascarar(cuenta.NumeroCuentaCifrado));
+
+    private static DateOnly MesActual()
+    {
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        return new DateOnly(hoy.Year, hoy.Month, 1);
+    }
 }

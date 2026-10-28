@@ -53,6 +53,20 @@ public static class ColaboradoresEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // Solo frecuencias de meses que aún no empiezan.
+        group.MapPut("/{id:guid}/frecuencias/{frecuenciaId:guid}", async (Guid id, Guid frecuenciaId, RegistrarFrecuenciaRequest request, ColaboradoresService service, CancellationToken ct) =>
+                (await service.EditarFrecuenciaAsync(id, frecuenciaId, request, ct)).AHttp(TypedResults.Ok))
+            .Produces<FrecuenciaResponse>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        group.MapDelete("/{id:guid}/frecuencias/{frecuenciaId:guid}", async (Guid id, Guid frecuenciaId, ColaboradoresService service, CancellationToken ct) =>
+                (await service.EliminarFrecuenciaAsync(id, frecuenciaId, ct)).AHttp(_ => TypedResults.NoContent()))
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         // Reemplaza la cuenta activa; la anterior queda como historial.
         group.MapPut("/{id:guid}/cuenta-bancaria", async (Guid id, RegistrarCuentaBancariaRequest request, ColaboradoresService service, CancellationToken ct) =>
                 (await service.RegistrarCuentaBancariaAsync(id, request, ct)).AHttp(TypedResults.Ok))
