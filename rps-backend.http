@@ -1,6 +1,58 @@
 @rps_backend_HostAddress = http://localhost:5203
+@colaboradorId = REEMPLAZAR-CON-ID
 
-GET {{rps_backend_HostAddress}}/weatherforecast/
+### Listar colaboradores (filtros opcionales: ?estado=Pendiente|Configurado &activo=true|false)
+GET {{rps_backend_HostAddress}}/api/colaboradores
 Accept: application/json
+
+### Obtener un colaborador
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}
+Accept: application/json
+
+### Crear colaborador
+POST {{rps_backend_HostAddress}}/api/colaboradores
+Content-Type: application/json
+
+{
+  "tmrColaboradorId": "TMR-001",
+  "clasificacion": "Profesional"
+}
+
+### Actualizar clasificación
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/clasificacion
+Content-Type: application/json
+
+{
+  "clasificacion": "Junior"
+}
+
+### Desactivar colaborador (no borra nada, se puede volver a activar)
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/desactivar
+
+### Activar colaborador
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/activar
+
+### Listar frecuencias
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/frecuencias
+Accept: application/json
+
+### Registrar frecuencia
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/frecuencias
+Content-Type: application/json
+
+{
+  "frecuencia": "DosPagos",
+  "vigenteDesdeMes": "2026-10-01"
+}
+
+### Registrar / reemplazar cuenta bancaria
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/cuenta-bancaria
+Content-Type: application/json
+
+{
+  "banco": "Banco Pichincha",
+  "tipoCuenta": "Ahorros",
+  "numeroCuenta": "2201234567"
+}
 
 ###

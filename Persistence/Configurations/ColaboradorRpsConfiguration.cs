@@ -31,5 +31,10 @@ public class ColaboradorRpsConfiguration : IEntityTypeConfiguration<ColaboradorR
             .HasConversion<string>()
             .HasMaxLength(20)
             .HasDefaultValue(EstadoConfiguracion.Pendiente);
+
+        // Sentinel true: si Activo = false, EF lo envía y no lo pisa el default de la base.
+        builder.Property(c => c.Activo)
+            .HasDefaultValue(true)
+            .HasSentinel(true);
     }
 }

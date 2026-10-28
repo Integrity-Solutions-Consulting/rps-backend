@@ -66,6 +66,12 @@ namespace rps_backend.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("Activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("activo");
+
                     b.Property<DateTime>("ActualizadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("actualizado_en");

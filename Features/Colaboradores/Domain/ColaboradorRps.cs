@@ -12,6 +12,8 @@ public class ColaboradorRps
 
     public EstadoConfiguracion EstadoConfiguracion { get; set; } = EstadoConfiguracion.Pendiente;
 
+    public bool Activo { get; set; } = true;
+
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 
     public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
