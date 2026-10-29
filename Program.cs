@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using rps_backend.Features.Anticipos.Api;
+using rps_backend.Features.Anticipos.Application;
 using rps_backend.Features.Colaboradores.Api;
 using rps_backend.Features.Colaboradores.Application;
 using rps_backend.Features.Contratos.Api;
@@ -31,6 +33,7 @@ builder.Services.AddScoped<ColaboradoresService>();
 builder.Services.AddScoped<ContratosService>();
 builder.Services.AddScoped<HonorariosService>();
 builder.Services.AddScoped<LiquidacionesService>();
+builder.Services.AddScoped<AnticiposService>();
 
 var app = builder.Build();
 
@@ -46,5 +49,6 @@ app.MapColaboradoresEndpoints();
 app.MapContratosEndpoints();
 app.MapHonorariosEndpoints();
 app.MapLiquidacionesEndpoints();
+app.MapAnticiposEndpoints();
 
 app.Run();

@@ -23,6 +23,60 @@ namespace rps_backend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("rps_backend.Features.Anticipos.Domain.Anticipo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pendiente")
+                        .HasColumnName("estado");
+
+                    b.Property<DateOnly>("FechaSolicitud")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_solicitud");
+
+                    b.Property<Guid?>("HonorarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("honorario_id");
+
+                    b.Property<decimal>("Monto")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("monto");
+
+                    b.HasKey("Id")
+                        .HasName("pk_anticipo");
+
+                    b.HasIndex("ColaboradorId")
+                        .HasDatabaseName("ix_anticipo_colaborador_id");
+
+                    b.HasIndex("HonorarioId")
+                        .HasDatabaseName("ix_anticipo_honorario_id");
+
+                    b.ToTable("anticipo", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_anticipo_estado", "estado IN ('Pendiente', 'Aprobado', 'Descontado', 'Anulado')");
+                        });
+                });
+
             modelBuilder.Entity("rps_backend.Features.Colaboradores.Domain.ColaboradorFrecuencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -228,6 +282,12 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<decimal>("Descuento")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("descuento");
+
                     b.Property<string>("Estado")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -322,6 +382,22 @@ namespace rps_backend.Migrations
                         {
                             t.HasCheckConstraint("ck_liquidacion_estado", "estado IN ('Generada', 'Pagada')");
                         });
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Anticipos.Domain.Anticipo", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_anticipo_colaboradores_rps_colaborador_id");
+
+                    b.HasOne("rps_backend.Features.Honorarios.Domain.Honorario", null)
+                        .WithMany()
+                        .HasForeignKey("HonorarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_anticipo_honorarios_honorario_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Colaboradores.Domain.ColaboradorFrecuencia", b =>

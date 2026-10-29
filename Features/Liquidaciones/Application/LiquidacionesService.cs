@@ -79,7 +79,7 @@ public class LiquidacionesService(RpsDbContext db)
             .Where(h => h.LiquidacionId == id)
             .OrderBy(h => h.NumeroPago)
             .Select(h => new HonorarioResponse(
-                h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Estado, h.CreadoEn, h.ActualizadoEn))
+                h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Descuento, h.Estado, h.CreadoEn, h.ActualizadoEn))
             .ToListAsync(ct);
 
         return new LiquidacionDetalleResponse(

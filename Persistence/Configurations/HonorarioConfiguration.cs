@@ -25,6 +25,10 @@ public class HonorarioConfiguration : IEntityTypeConfiguration<Honorario>
         builder.Property(h => h.Monto)
             .HasColumnType("numeric(12,2)");
 
+        builder.Property(h => h.Descuento)
+            .HasColumnType("numeric(12,2)")
+            .HasDefaultValue(0m);
+
         builder.Property(h => h.Estado)
             .HasConversion<string>()
             .HasMaxLength(20)

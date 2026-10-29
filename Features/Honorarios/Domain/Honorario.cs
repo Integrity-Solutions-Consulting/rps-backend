@@ -14,7 +14,11 @@ public class Honorario
 
     public int NumeroPago { get; set; }
 
+    // Neto a pagar (bruto - Descuento).
     public decimal Monto { get; set; }
+
+    // Suma de anticipos descontados al generar este honorario.
+    public decimal Descuento { get; set; } = 0;
 
     public EstadoHonorario Estado { get; set; } = EstadoHonorario.Pendiente;
 

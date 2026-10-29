@@ -17,6 +17,7 @@ public record HonorarioResponse(
     DateOnly Periodo,
     int NumeroPago,
     decimal Monto,
+    decimal Descuento,
     EstadoHonorario Estado,
     DateTime CreadoEn,
     DateTime ActualizadoEn);

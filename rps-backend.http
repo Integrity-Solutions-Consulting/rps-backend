@@ -144,4 +144,23 @@ Accept: application/json
 ### Marcar como pagada (Generada -> Pagada; propaga Pagado a sus honorarios)
 POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/pagar
 
+### Crear anticipo
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos
+Content-Type: application/json
+
+{
+  "monto": 150.00
+}
+
+### Listar anticipos (filtro opcional: ?estado=Pendiente|Aprobado|Descontado|Anulado)
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos
+Accept: application/json
+
+### Aprobar anticipo (Pendiente -> Aprobado; a partir de aquí se descuenta solo al generar honorarios)
+@anticipoId = REEMPLAZAR-CON-ID
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}/aprobar
+
+### Anular anticipo (Pendiente o Aprobado -> Anulado)
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}/anular
+
 ###

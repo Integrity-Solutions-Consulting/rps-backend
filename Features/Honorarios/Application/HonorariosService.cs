@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using rps_backend.Features.Anticipos.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Persistence;
 using rps_backend.Shared;
@@ -38,6 +39,14 @@ public class HonorariosService(RpsDbContext db)
             .GroupBy(f => f.ColaboradorId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.VigenteDesdeMes).First().Frecuencia);
 
+        // Anticipos Aprobado pendientes de descontar, más antiguo primero. Tracked (no AsNoTracking):
+        // se modifican más abajo al aplicarse.
+        var anticiposPorColaborador = (await db.Anticipos
+                .Where(a => colaboradorIds.Contains(a.ColaboradorId) && a.Estado == EstadoAnticipo.Aprobado)
+                .ToListAsync(ct))
+            .GroupBy(a => a.ColaboradorId)
+            .ToDictionary(g => g.Key, g => new Queue<Anticipo>(g.OrderBy(a => a.FechaSolicitud)));
+
         var existentes = (await db.Honorarios.AsNoTracking()
                 .Where(h => h.Periodo == periodo && colaboradorIds.Contains(h.ColaboradorId))
                 .Select(h => new { h.ColaboradorId, h.ContratoId, h.NumeroPago })
@@ -58,7 +67,7 @@ public class HonorariosService(RpsDbContext db)
                 ? [(1, contrato.Tarifa / 2), (2, contrato.Tarifa / 2)]
                 : [(1, contrato.Tarifa)];
 
-            foreach (var (numeroPago, monto) in pagos)
+            foreach (var (numeroPago, montoBruto) in pagos)
             {
                 if (existentes.Contains((contrato.ColaboradorId, contrato.Id, numeroPago)))
                 {
@@ -66,14 +75,32 @@ public class HonorariosService(RpsDbContext db)
                     continue;
                 }
 
-                nuevos.Add(new Honorario
+                var honorario = new Honorario
                 {
                     ColaboradorId = contrato.ColaboradorId,
                     ContratoId = contrato.Id,
                     Periodo = periodo,
                     NumeroPago = numeroPago,
-                    Monto = monto
-                });
+                    Monto = montoBruto
+                };
+
+                // Descuenta anticipos completos mientras alcancen; uno que no alcanza se deja
+                // para el próximo honorario (de este u otro período) sin fraccionarlo.
+                if (anticiposPorColaborador.TryGetValue(contrato.ColaboradorId, out var pendientes))
+                {
+                    while (pendientes.Count > 0 && pendientes.Peek().Monto <= honorario.Monto)
+                    {
+                        var anticipo = pendientes.Dequeue();
+                        honorario.Monto -= anticipo.Monto;
+                        honorario.Descuento += anticipo.Monto;
+
+                        anticipo.Estado = EstadoAnticipo.Descontado;
+                        anticipo.HonorarioId = honorario.Id;
+                        anticipo.ActualizadoEn = DateTime.UtcNow;
+                    }
+                }
+
+                nuevos.Add(honorario);
             }
         }
 
@@ -104,7 +131,7 @@ public class HonorariosService(RpsDbContext db)
             .OrderByDescending(h => h.Periodo)
             .ThenBy(h => h.NumeroPago)
             .Select(h => new HonorarioResponse(
-                h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Estado, h.CreadoEn, h.ActualizadoEn))
+                h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Descuento, h.Estado, h.CreadoEn, h.ActualizadoEn))
             .ToListAsync(ct);
     }
 
@@ -166,5 +193,5 @@ public class HonorariosService(RpsDbContext db)
     }
 
     private static HonorarioResponse AResponse(Honorario h) => new(
-        h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Estado, h.CreadoEn, h.ActualizadoEn);
+        h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Descuento, h.Estado, h.CreadoEn, h.ActualizadoEn);
 }
