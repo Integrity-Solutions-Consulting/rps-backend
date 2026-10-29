@@ -163,4 +163,22 @@ POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{
 ### Anular anticipo (Pendiente o Aprobado -> Anulado)
 POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}/anular
 
+### Obtener configuracion global
+GET {{rps_backend_HostAddress}}/api/configuracion
+Accept: application/json
+
+### Actualizar configuracion global
+PUT {{rps_backend_HostAddress}}/api/configuracion
+Content-Type: application/json
+
+{
+  "razonSocial": "Integrity Solutions S.A.",
+  "ruc": "1790012345001",
+  "moneda": "USD",
+  "diaPagoFinDeMes": 30,
+  "diaPagoDosPagos1": 15,
+  "diaPagoDosPagos2": 30,
+  "topeMaximoAnticipo": 500.00
+}
+
 ###

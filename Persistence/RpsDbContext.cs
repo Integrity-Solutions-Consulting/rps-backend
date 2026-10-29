@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Anticipos.Domain;
 using rps_backend.Features.Colaboradores.Domain;
+using rps_backend.Features.Configuracion.Domain;
 using rps_backend.Features.Contratos.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Liquidaciones.Domain;
@@ -19,6 +20,7 @@ public class RpsDbContext : DbContext
     public DbSet<Honorario> Honorarios => Set<Honorario>();
     public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();
     public DbSet<Anticipo> Anticipos => Set<Anticipo>();
+    public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

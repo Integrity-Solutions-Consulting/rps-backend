@@ -210,6 +210,71 @@ namespace rps_backend.Migrations
                     b.ToTable("cuenta_bancaria", "rps");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<int>("DiaPagoDosPagos1")
+                        .HasColumnType("integer")
+                        .HasColumnName("dia_pago_dos_pagos1");
+
+                    b.Property<int>("DiaPagoDosPagos2")
+                        .HasColumnType("integer")
+                        .HasColumnName("dia_pago_dos_pagos2");
+
+                    b.Property<int>("DiaPagoFinDeMes")
+                        .HasColumnType("integer")
+                        .HasColumnName("dia_pago_fin_de_mes");
+
+                    b.Property<string>("Moneda")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("moneda");
+
+                    b.Property<string>("RazonSocial")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("razon_social");
+
+                    b.Property<string>("Ruc")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ruc");
+
+                    b.Property<decimal>("TopeMaximoAnticipo")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("tope_maximo_anticipo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_configuracion_global");
+
+                    b.ToTable("configuracion_global", "rps");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000001"),
+                            ActualizadoEn = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DiaPagoDosPagos1 = 15,
+                            DiaPagoDosPagos2 = 30,
+                            DiaPagoFinDeMes = 30,
+                            Moneda = "USD",
+                            RazonSocial = "",
+                            Ruc = "",
+                            TopeMaximoAnticipo = 1000000.00m
+                        });
+                });
+
             modelBuilder.Entity("rps_backend.Features.Contratos.Domain.Contrato", b =>
                 {
                     b.Property<Guid>("Id")

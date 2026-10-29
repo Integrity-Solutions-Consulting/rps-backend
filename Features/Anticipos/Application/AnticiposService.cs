@@ -44,6 +44,10 @@ public class AnticiposService(RpsDbContext db)
         if (request.Monto is null || request.Monto <= 0)
             return AnticipoErrores.MontoInvalido;
 
+        var tope = (await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct)).TopeMaximoAnticipo;
+        if (request.Monto > tope)
+            return AnticipoErrores.MontoExcedeTope(tope);
+
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
         if (colaborador is null)
             return AnticipoErrores.ColaboradorNoEncontrado(colaboradorId);

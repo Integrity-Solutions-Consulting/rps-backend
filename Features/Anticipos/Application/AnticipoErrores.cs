@@ -27,4 +27,7 @@ public static class AnticipoErrores
 
     public static readonly Error MontoInvalido =
         Error.Validacion("Anticipo.MontoInvalido", "monto", "Es obligatorio y debe ser mayor a 0.");
+
+    public static Error MontoExcedeTope(decimal tope) =>
+        Error.Validacion("Anticipo.MontoExcedeTope", "monto", $"No puede superar el tope máximo configurado ({tope:F2}).");
 }
