@@ -7,8 +7,8 @@ namespace rps_backend.Features.Colaboradores.Application;
 
 public static class ColaboradorEstado
 {
-    // Configurado = tiene clasificación + al menos una frecuencia + una cuenta bancaria activa.
-    // Consulta la base, así que se llama después de guardar los cambios de frecuencia/cuenta.
+    // Configurado = tiene clasificación + al menos una frecuencia + una cuenta bancaria activa + un contrato vigente.
+    // Consulta la base, así que se llama después de guardar los cambios de frecuencia/cuenta/contrato.
     public static async Task RecalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
     {
         var tieneFrecuencia = await db.ColaboradoresFrecuencia
@@ -17,8 +17,14 @@ public static class ColaboradorEstado
         var tieneCuentaActiva = await db.CuentasBancarias
             .AnyAsync(c => c.ColaboradorId == colaborador.Id && c.Activa, ct);
 
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var tieneContratoVigente = await db.Contratos
+            .AnyAsync(c => c.ColaboradorId == colaborador.Id
+                && c.FechaInicio <= hoy
+                && (c.FechaFin == null || c.FechaFin >= hoy), ct);
+
         colaborador.EstadoConfiguracion =
-            colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva
+            colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva && tieneContratoVigente
                 ? EstadoConfiguracion.Configurado
                 : EstadoConfiguracion.Pendiente;
 

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Colaboradores.Api;
 using rps_backend.Features.Colaboradores.Application;
+using rps_backend.Features.Contratos.Api;
+using rps_backend.Features.Contratos.Application;
 using rps_backend.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +24,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection().SetApplicationName("rps-backend");
 builder.Services.AddSingleton<CuentaBancariaProtector>();
 builder.Services.AddScoped<ColaboradoresService>();
+builder.Services.AddScoped<ContratosService>();
 
 var app = builder.Build();
 
@@ -34,5 +37,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapColaboradoresEndpoints();
+app.MapContratosEndpoints();
 
 app.Run();

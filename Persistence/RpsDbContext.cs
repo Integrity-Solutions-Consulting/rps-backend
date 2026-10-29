@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Colaboradores.Domain;
+using rps_backend.Features.Contratos.Domain;
 namespace rps_backend.Persistence;
 
 public class RpsDbContext : DbContext
@@ -11,6 +12,7 @@ public class RpsDbContext : DbContext
     public DbSet<ColaboradorRps> ColaboradoresRps => Set<ColaboradorRps>();
     public DbSet<ColaboradorFrecuencia> ColaboradoresFrecuencia => Set<ColaboradorFrecuencia>();
     public DbSet<CuentaBancaria> CuentasBancarias => Set<CuentaBancaria>();
+    public DbSet<Contrato> Contratos => Set<Contrato>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -68,4 +68,34 @@ Content-Type: application/json
   "numeroCuenta": "2201234567"
 }
 
+### Listar contratos (filtro opcional: ?vigente=true|false)
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos
+Accept: application/json
+
+### Crear contrato
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos
+Content-Type: application/json
+
+{
+  "tipoServicio": "Consultoría",
+  "tarifa": 1500.00,
+  "fechaInicio": "2026-10-01",
+  "fechaFin": null
+}
+
+### Editar contrato
+@contratoId = REEMPLAZAR-CON-ID
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}
+Content-Type: application/json
+
+{
+  "tipoServicio": "Consultoría",
+  "tarifa": 1700.00,
+  "fechaInicio": "2026-10-01",
+  "fechaFin": "2026-12-31"
+}
+
+### Eliminar contrato (solo si aún no ha empezado)
+DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}
+
 ###

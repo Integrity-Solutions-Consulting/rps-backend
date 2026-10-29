@@ -156,6 +156,55 @@ namespace rps_backend.Migrations
                     b.ToTable("cuenta_bancaria", "rps");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Contratos.Domain.Contrato", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateOnly?>("FechaFin")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_fin");
+
+                    b.Property<DateOnly>("FechaInicio")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_inicio");
+
+                    b.Property<decimal>("Tarifa")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("tarifa");
+
+                    b.Property<string>("TipoServicio")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("tipo_servicio");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contrato");
+
+                    b.HasIndex("ColaboradorId")
+                        .HasDatabaseName("ix_contrato_colaborador_id");
+
+                    b.ToTable("contrato", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_contrato_fecha_fin", "fecha_fin IS NULL OR fecha_fin >= fecha_inicio");
+                        });
+                });
+
             modelBuilder.Entity("rps_backend.Features.Colaboradores.Domain.ColaboradorFrecuencia", b =>
                 {
                     b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
@@ -174,6 +223,16 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_cuenta_bancaria_colaborador_rps_colaborador_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Contratos.Domain.Contrato", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contrato_colaborador_rps_colaborador_id");
                 });
 #pragma warning restore 612, 618
         }
