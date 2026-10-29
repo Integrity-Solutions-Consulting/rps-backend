@@ -203,4 +203,12 @@ DELETE {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}
 ### Generar comprobante de una liquidacion (origen Generado, texto plano)
 POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/comprobante
 
+### Dashboard: resumen general (sin periodo, cuenta todo)
+GET {{rps_backend_HostAddress}}/api/dashboard
+Accept: application/json
+
+### Dashboard: resumen de un periodo (honorarios/liquidaciones filtrados; colaboradores/anticipos no)
+GET {{rps_backend_HostAddress}}/api/dashboard?periodo=2026-11-01
+Accept: application/json
+
 ###
