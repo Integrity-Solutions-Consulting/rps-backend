@@ -205,6 +205,67 @@ namespace rps_backend.Migrations
                         });
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.Honorario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<Guid>("ContratoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contrato_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pendiente")
+                        .HasColumnName("estado");
+
+                    b.Property<decimal>("Monto")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("monto");
+
+                    b.Property<int>("NumeroPago")
+                        .HasColumnType("integer")
+                        .HasColumnName("numero_pago");
+
+                    b.Property<DateOnly>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_honorario");
+
+                    b.HasIndex("ContratoId")
+                        .HasDatabaseName("ix_honorario_contrato_id");
+
+                    b.HasIndex("ColaboradorId", "ContratoId", "Periodo", "NumeroPago")
+                        .IsUnique()
+                        .HasDatabaseName("ix_honorario_colaborador_id_contrato_id_periodo_numero_pago");
+
+                    b.ToTable("honorario", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_honorario_estado", "estado IN ('Pendiente', 'Aprobado', 'Pagado', 'Anulado')");
+
+                            t.HasCheckConstraint("ck_honorario_numero_pago", "numero_pago IN (1, 2)");
+                        });
+                });
+
             modelBuilder.Entity("rps_backend.Features.Colaboradores.Domain.ColaboradorFrecuencia", b =>
                 {
                     b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
@@ -233,6 +294,23 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_contrato_colaborador_rps_colaborador_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.Honorario", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_honorario_colaborador_rps_colaborador_id");
+
+                    b.HasOne("rps_backend.Features.Contratos.Domain.Contrato", null)
+                        .WithMany()
+                        .HasForeignKey("ContratoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_honorario_contrato_contrato_id");
                 });
 #pragma warning restore 612, 618
         }

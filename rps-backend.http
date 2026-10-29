@@ -98,4 +98,30 @@ Content-Type: application/json
 ### Eliminar contrato (solo si aún no ha empezado)
 DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}
 
+### Generar honorarios de un período (1 por contrato vigente; DosPagos = 2 líneas, FinDeMes = 1)
+POST {{rps_backend_HostAddress}}/api/honorarios/generar
+Content-Type: application/json
+
+{
+  "periodo": "2026-11-01"
+}
+
+### Listar honorarios (filtros opcionales: ?periodo=&colaboradorId=&estado=)
+GET {{rps_backend_HostAddress}}/api/honorarios?periodo=2026-11-01
+Accept: application/json
+
+### Obtener un honorario
+@honorarioId = REEMPLAZAR-CON-ID
+GET {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}
+Accept: application/json
+
+### Aprobar honorario (Pendiente -> Aprobado)
+POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/aprobar
+
+### Marcar como pagado (Aprobado -> Pagado)
+POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/pagar
+
+### Anular (Pendiente o Aprobado -> Anulado)
+POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/anular
+
 ###

@@ -5,6 +5,8 @@ using rps_backend.Features.Colaboradores.Api;
 using rps_backend.Features.Colaboradores.Application;
 using rps_backend.Features.Contratos.Api;
 using rps_backend.Features.Contratos.Application;
+using rps_backend.Features.Honorarios.Api;
+using rps_backend.Features.Honorarios.Application;
 using rps_backend.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +27,7 @@ builder.Services.AddDataProtection().SetApplicationName("rps-backend");
 builder.Services.AddSingleton<CuentaBancariaProtector>();
 builder.Services.AddScoped<ColaboradoresService>();
 builder.Services.AddScoped<ContratosService>();
+builder.Services.AddScoped<HonorariosService>();
 
 var app = builder.Build();
 
@@ -38,5 +41,6 @@ app.UseHttpsRedirection();
 
 app.MapColaboradoresEndpoints();
 app.MapContratosEndpoints();
+app.MapHonorariosEndpoints();
 
 app.Run();
