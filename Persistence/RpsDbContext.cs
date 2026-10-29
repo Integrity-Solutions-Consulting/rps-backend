@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Contratos.Domain;
 using rps_backend.Features.Honorarios.Domain;
+using rps_backend.Features.Liquidaciones.Domain;
 namespace rps_backend.Persistence;
 
 public class RpsDbContext : DbContext
@@ -15,6 +16,7 @@ public class RpsDbContext : DbContext
     public DbSet<CuentaBancaria> CuentasBancarias => Set<CuentaBancaria>();
     public DbSet<Contrato> Contratos => Set<Contrato>();
     public DbSet<Honorario> Honorarios => Set<Honorario>();
+    public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

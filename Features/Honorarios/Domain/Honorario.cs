@@ -18,6 +18,9 @@ public class Honorario
 
     public EstadoHonorario Estado { get; set; } = EstadoHonorario.Pendiente;
 
+    // Null = aún no incluido en ninguna liquidación.
+    public Guid? LiquidacionId { get; set; }
+
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 
     public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;

@@ -124,4 +124,24 @@ POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/pagar
 ### Anular (Pendiente o Aprobado -> Anulado)
 POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/anular
 
+### Generar liquidaciones de un período (1 por colaborador, agrupa honorarios Aprobado sin liquidar)
+POST {{rps_backend_HostAddress}}/api/liquidaciones/generar
+Content-Type: application/json
+
+{
+  "periodo": "2026-11-01"
+}
+
+### Listar liquidaciones (filtros opcionales: ?periodo=&colaboradorId=&estado=)
+GET {{rps_backend_HostAddress}}/api/liquidaciones?periodo=2026-11-01
+Accept: application/json
+
+### Obtener una liquidación (incluye los honorarios agrupados)
+@liquidacionId = REEMPLAZAR-CON-ID
+GET {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}
+Accept: application/json
+
+### Marcar como pagada (Generada -> Pagada; propaga Pagado a sus honorarios)
+POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/pagar
+
 ###

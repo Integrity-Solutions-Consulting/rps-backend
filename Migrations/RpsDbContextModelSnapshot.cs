@@ -236,6 +236,10 @@ namespace rps_backend.Migrations
                         .HasDefaultValue("Pendiente")
                         .HasColumnName("estado");
 
+                    b.Property<Guid?>("LiquidacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("liquidacion_id");
+
                     b.Property<decimal>("Monto")
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("monto");
@@ -254,6 +258,9 @@ namespace rps_backend.Migrations
                     b.HasIndex("ContratoId")
                         .HasDatabaseName("ix_honorario_contrato_id");
 
+                    b.HasIndex("LiquidacionId")
+                        .HasDatabaseName("ix_honorario_liquidacion_id");
+
                     b.HasIndex("ColaboradorId", "ContratoId", "Periodo", "NumeroPago")
                         .IsUnique()
                         .HasDatabaseName("ix_honorario_colaborador_id_contrato_id_periodo_numero_pago");
@@ -263,6 +270,57 @@ namespace rps_backend.Migrations
                             t.HasCheckConstraint("ck_honorario_estado", "estado IN ('Pendiente', 'Aprobado', 'Pagado', 'Anulado')");
 
                             t.HasCheckConstraint("ck_honorario_numero_pago", "numero_pago IN (1, 2)");
+                        });
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.Liquidacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Generada")
+                        .HasColumnName("estado");
+
+                    b.Property<decimal>("MontoTotal")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("monto_total");
+
+                    b.Property<DateTime?>("PagadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pagada_en");
+
+                    b.Property<DateOnly>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_liquidacion");
+
+                    b.HasIndex("ColaboradorId", "Periodo")
+                        .HasDatabaseName("ix_liquidacion_colaborador_id_periodo");
+
+                    b.ToTable("liquidacion", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_liquidacion_estado", "estado IN ('Generada', 'Pagada')");
                         });
                 });
 
@@ -311,6 +369,22 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_honorario_contrato_contrato_id");
+
+                    b.HasOne("rps_backend.Features.Liquidaciones.Domain.Liquidacion", null)
+                        .WithMany()
+                        .HasForeignKey("LiquidacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_honorario_liquidaciones_liquidacion_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.Liquidacion", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_liquidacion_colaborador_rps_colaborador_id");
                 });
 #pragma warning restore 612, 618
         }

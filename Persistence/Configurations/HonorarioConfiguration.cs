@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Contratos.Domain;
 using rps_backend.Features.Honorarios.Domain;
+using rps_backend.Features.Liquidaciones.Domain;
 using rps_backend.Shared;
 
 namespace rps_backend.Persistence.Configurations;
@@ -37,6 +38,11 @@ public class HonorarioConfiguration : IEntityTypeConfiguration<Honorario>
         builder.HasOne<Contrato>()
             .WithMany()
             .HasForeignKey(h => h.ContratoId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Liquidacion>()
+            .WithMany()
+            .HasForeignKey(h => h.LiquidacionId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Hace que generar un período sea idempotente: no se puede duplicar el mismo pago.
