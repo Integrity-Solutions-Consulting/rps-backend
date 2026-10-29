@@ -9,6 +9,8 @@ using rps_backend.Features.Configuracion.Api;
 using rps_backend.Features.Configuracion.Application;
 using rps_backend.Features.Contratos.Api;
 using rps_backend.Features.Contratos.Application;
+using rps_backend.Features.Documentos.Api;
+using rps_backend.Features.Documentos.Application;
 using rps_backend.Features.Honorarios.Api;
 using rps_backend.Features.Honorarios.Application;
 using rps_backend.Features.Liquidaciones.Api;
@@ -37,6 +39,7 @@ builder.Services.AddScoped<HonorariosService>();
 builder.Services.AddScoped<LiquidacionesService>();
 builder.Services.AddScoped<AnticiposService>();
 builder.Services.AddScoped<ConfiguracionService>();
+builder.Services.AddScoped<DocumentosService>();
 
 var app = builder.Build();
 
@@ -54,5 +57,7 @@ app.MapHonorariosEndpoints();
 app.MapLiquidacionesEndpoints();
 app.MapAnticiposEndpoints();
 app.MapConfiguracionEndpoints();
+app.MapDocumentosEndpoints();
+app.MapComprobantesEndpoints();
 
 app.Run();

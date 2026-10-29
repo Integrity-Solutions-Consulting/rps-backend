@@ -181,4 +181,26 @@ Content-Type: application/json
   "topeMaximoAnticipo": 500.00
 }
 
+### Documentos: la subida es multipart/form-data, no se puede expresar bien en este archivo.
+### Probar con curl, por ejemplo:
+### curl -F "archivo=@contrato.pdf" -F "colaboradorId={{colaboradorId}}" {{rps_backend_HostAddress}}/api/documentos
+
+### Listar documentos (filtros opcionales: ?colaboradorId=&contratoId=&liquidacionId=)
+GET {{rps_backend_HostAddress}}/api/documentos?colaboradorId={{colaboradorId}}
+Accept: application/json
+
+### Obtener metadata de un documento
+@documentoId = REEMPLAZAR-CON-ID
+GET {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}
+Accept: application/json
+
+### Descargar un documento
+GET {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}/descargar
+
+### Eliminar un documento (borra fila + archivo en disco)
+DELETE {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}
+
+### Generar comprobante de una liquidacion (origen Generado, texto plano)
+POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/comprobante
+
 ###
