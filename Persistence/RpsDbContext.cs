@@ -26,7 +26,7 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();
     public DbSet<Anticipo> Anticipos => Set<Anticipo>();
     public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
-    public DbSet<Documento> Documentos => Set<Documento>();
+    public DbSet<DocumentoMensual> DocumentosMensuales => Set<DocumentoMensual>();
     public DbSet<Feriado> Feriados => Set<Feriado>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys
         => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();

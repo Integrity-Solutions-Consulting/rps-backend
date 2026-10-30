@@ -181,27 +181,34 @@ Content-Type: application/json
   "topeMaximoAnticipo": 500.00
 }
 
-### Documentos: la subida es multipart/form-data, no se puede expresar bien en este archivo.
-### Probar con curl, por ejemplo:
-### curl -F "archivo=@contrato.pdf" -F "colaboradorId={{colaboradorId}}" {{rps_backend_HostAddress}}/api/documentos
+### Registrar documento mensual (check de factura/nota de venta emitida; sin archivo adjunto)
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/documentos-mensuales
+Content-Type: application/json
 
-### Listar documentos (filtros opcionales: ?colaboradorId=&contratoId=&liquidacionId=)
-GET {{rps_backend_HostAddress}}/api/documentos?colaboradorId={{colaboradorId}}
+{
+  "periodo": "2026-11-01",
+  "tipo": "Factura",
+  "numero": "001-001-000012345",
+  "fechaEmision": "2026-11-05"
+}
+
+### Listar documentos mensuales (filtro opcional: ?periodo=)
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/documentos-mensuales
 Accept: application/json
 
-### Obtener metadata de un documento
-@documentoId = REEMPLAZAR-CON-ID
-GET {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}
-Accept: application/json
+### Editar documento mensual (corregir tipo/número/fecha)
+@documentoMensualId = REEMPLAZAR-CON-ID
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/documentos-mensuales/{{documentoMensualId}}
+Content-Type: application/json
 
-### Descargar un documento
-GET {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}/descargar
+{
+  "tipo": "NotaDeVenta",
+  "numero": "001-001-000012345",
+  "fechaEmision": "2026-11-05"
+}
 
-### Eliminar un documento (borra fila + archivo en disco)
-DELETE {{rps_backend_HostAddress}}/api/documentos/{{documentoId}}
-
-### Generar comprobante de una liquidacion (origen Generado, texto plano)
-POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/comprobante
+### Eliminar documento mensual (vuelve a "faltante")
+DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/documentos-mensuales/{{documentoMensualId}}
 
 ### Dashboard: resumen general (sin periodo, cuenta todo)
 GET {{rps_backend_HostAddress}}/api/dashboard

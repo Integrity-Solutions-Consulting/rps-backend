@@ -24,9 +24,6 @@ appsettings.Local.json
 *.pfx
 *.key
 
-# ===== Archivos subidos (Documentos) =====
-/uploads/
-
 # ===== Bases de datos locales =====
 *.db
 *.sqlite

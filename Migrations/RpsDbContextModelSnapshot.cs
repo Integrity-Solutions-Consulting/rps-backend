@@ -347,75 +347,49 @@ namespace rps_backend.Migrations
                         });
                 });
 
-            modelBuilder.Entity("rps_backend.Features.Documentos.Domain.Documento", b =>
+            modelBuilder.Entity("rps_backend.Features.Documentos.Domain.DocumentoMensual", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid?>("ColaboradorId")
+                    b.Property<Guid>("ColaboradorId")
                         .HasColumnType("uuid")
                         .HasColumnName("colaborador_id");
 
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("content_type");
+                    b.Property<DateOnly>("FechaEmision")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_emision");
 
-                    b.Property<Guid?>("ContratoId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("contrato_id");
-
-                    b.Property<DateTime>("CreadoEn")
+                    b.Property<DateTime>("MarcadoEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("creado_en");
+                        .HasColumnName("marcado_en");
 
-                    b.Property<Guid?>("LiquidacionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("liquidacion_id");
-
-                    b.Property<string>("NombreOriginal")
+                    b.Property<string>("Numero")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("nombre_original");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("numero");
 
-                    b.Property<string>("Origen")
+                    b.Property<DateOnly>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.Property<string>("Tipo")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Subido")
-                        .HasColumnName("origen");
-
-                    b.Property<string>("RutaArchivo")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("ruta_archivo");
-
-                    b.Property<long>("TamanoBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("tamano_bytes");
+                        .HasColumnName("tipo");
 
                     b.HasKey("Id")
-                        .HasName("pk_documento");
+                        .HasName("pk_documento_mensual");
 
-                    b.HasIndex("ColaboradorId")
-                        .HasDatabaseName("ix_documento_colaborador_id");
+                    b.HasIndex("ColaboradorId", "Periodo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_documento_mensual_colaborador_id_periodo");
 
-                    b.HasIndex("ContratoId")
-                        .HasDatabaseName("ix_documento_contrato_id");
-
-                    b.HasIndex("LiquidacionId")
-                        .HasDatabaseName("ix_documento_liquidacion_id");
-
-                    b.ToTable("documento", "rps", t =>
-                        {
-                            t.HasCheckConstraint("ck_documento_una_referencia", "(colaborador_id IS NOT NULL)::int + (contrato_id IS NOT NULL)::int + (liquidacion_id IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("documento_mensual", "rps");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Feriados.Domain.Feriado", b =>
@@ -620,25 +594,14 @@ namespace rps_backend.Migrations
                         .HasConstraintName("fk_contrato_colaborador_rps_colaborador_id");
                 });
 
-            modelBuilder.Entity("rps_backend.Features.Documentos.Domain.Documento", b =>
+            modelBuilder.Entity("rps_backend.Features.Documentos.Domain.DocumentoMensual", b =>
                 {
                     b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
                         .WithMany()
                         .HasForeignKey("ColaboradorId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_documento_colaborador_rps_colaborador_id");
-
-                    b.HasOne("rps_backend.Features.Contratos.Domain.Contrato", null)
-                        .WithMany()
-                        .HasForeignKey("ContratoId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_documento_contrato_contrato_id");
-
-                    b.HasOne("rps_backend.Features.Liquidaciones.Domain.Liquidacion", null)
-                        .WithMany()
-                        .HasForeignKey("LiquidacionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_documento_liquidaciones_liquidacion_id");
+                        .IsRequired()
+                        .HasConstraintName("fk_documento_mensual_colaborador_rps_colaborador_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.Honorario", b =>
