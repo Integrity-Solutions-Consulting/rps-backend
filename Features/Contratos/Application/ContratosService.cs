@@ -68,12 +68,12 @@ public class ContratosService(RpsDbContext db)
             c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId &&
             request.FechaInicio <= c.FechaFin && request.FechaFin >= c.FechaInicio, ct);
         if (seSuperpone)
-            return ContratoErrores.Superpuesto(request.ProyectoId.Value);
+            return ContratoErrores.Superpuesto(request.ProyectoId!.Value);
 
         var contrato = new Contrato
         {
             ColaboradorId = colaboradorId,
-            ProyectoId = request.ProyectoId.Value,
+            ProyectoId = request.ProyectoId!.Value,
             FechaInicio = request.FechaInicio!.Value,
             FechaFin = request.FechaFin!.Value,
             Referencia = referencia,
@@ -179,6 +179,10 @@ public class ContratosService(RpsDbContext db)
         if (observaciones?.Length > 500)
             return ContratoErrores.ObservacionesInvalidas;
 
+        var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
+        if (colaborador is null)
+            return ContratoErrores.ColaboradorNoEncontrado(colaboradorId);
+
         var contrato = await db.Contratos.FirstOrDefaultAsync(c => c.Id == contratoId && c.ColaboradorId == colaboradorId, ct);
         if (contrato is null)
             return ContratoErrores.NoEncontrado(contratoId);
@@ -196,8 +200,16 @@ public class ContratosService(RpsDbContext db)
             Observaciones = string.IsNullOrEmpty(observaciones) ? null : observaciones
         };
 
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
         db.Adendas.Add(adenda);
         await db.SaveChangesAsync(ct);
+
+        // Puede revivir la vigencia del contrato si su FechaFin original ya había pasado.
+        await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
+        await db.SaveChangesAsync(ct);
+
+        await tx.CommitAsync(ct);
 
         return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones);
     }

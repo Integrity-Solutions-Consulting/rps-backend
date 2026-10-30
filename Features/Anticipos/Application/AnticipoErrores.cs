@@ -34,4 +34,10 @@ public static class AnticipoErrores
 
     public static Error SumaCuotasNoCoincide(decimal monto) =>
         Error.Validacion("Anticipo.SumaCuotasNoCoincide", "cuotas", $"La suma de las cuotas debe ser exactamente {monto:F2}.");
+
+    public static readonly Error CorteIncompatibleConFrecuencia =
+        Error.Validacion(
+            "Anticipo.CorteIncompatibleConFrecuencia", "cuotas",
+            "El tipo de corte de cada cuota debe existir para la frecuencia de pago del colaborador en ese período " +
+            "(FinDeMes solo acepta cuotas de corte FinDeMes).");
 }

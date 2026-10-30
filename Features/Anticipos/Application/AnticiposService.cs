@@ -101,6 +101,19 @@ public class AnticiposService(RpsDbContext db)
         if (sumaCuotas != anticipo.Monto)
             return AnticipoErrores.SumaCuotasNoCoincide(anticipo.Monto);
 
+        // Una cuota de un corte que no se va a generar nunca se aplicaría (LiquidacionesService
+        // solo crea Corte.Quincena cuando la frecuencia es DosPagos): el plan quedaría registrado
+        // pero el saldo pendiente nunca se recuperaría de verdad.
+        var periodoCuotas = request.Cuotas[0].Periodo!.Value;
+        var frecuenciaVigente = await db.ColaboradoresFrecuencia.AsNoTracking()
+            .Where(f => f.ColaboradorId == colaboradorId && f.VigenteDesdeMes <= periodoCuotas)
+            .OrderByDescending(f => f.VigenteDesdeMes)
+            .Select(f => f.Frecuencia)
+            .FirstOrDefaultAsync(ct);
+
+        if (frecuenciaVigente != Frecuencia.DosPagos && request.Cuotas.Any(c => c.Corte != TipoCorte.FinDeMes))
+            return AnticipoErrores.CorteIncompatibleConFrecuencia;
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         var existentes = await db.CuotasRecuperacion.Where(c => c.AnticipoAdicionalId == anticipoId).ToListAsync(ct);

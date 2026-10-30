@@ -15,11 +15,6 @@ public static class FeriadoErrores
     public static Error FechaDuplicada(DateOnly fecha) =>
         Error.Conflicto("Feriado.FechaDuplicada", $"Ya existe un feriado registrado el {fecha:yyyy-MM-dd}.");
 
-    public static Error YaUsadoEnHonorarios(DateOnly fecha) =>
-        Error.Conflicto(
-            "Feriado.YaUsadoEnHonorarios",
-            $"No se puede eliminar: ya se generaron honorarios del período de {fecha:yyyy-MM-dd}, que pudo haber usado este feriado para calcular días hábiles.");
-
     public static readonly Error FuenteNoDisponible =
         Error.Conflicto("Feriado.FuenteNoDisponible", "No se pudo consultar la fuente de feriados (Nager.Date). Intenta más tarde o regístralos manualmente.");
 

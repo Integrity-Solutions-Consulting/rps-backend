@@ -22,12 +22,30 @@ public static class ColaboradorEstado
         var tieneCuentaActiva = await db.CuentasBancarias
             .AnyAsync(c => c.ColaboradorId == colaborador.Id && c.Activa, ct);
 
-        // No considera adendas aquí (ver Fase 2: este indicador se reemplaza por "tiene condición
-        // económica vigente", que es la que de verdad habilita el cálculo de honorarios).
-        var tieneContratoVigente = await db.Contratos
-            .AnyAsync(c => c.ColaboradorId == colaborador.Id
-                && c.FechaInicio <= hoy
-                && c.FechaFin >= hoy, ct);
+        // Considera adendas: un contrato cuya FechaFin original ya pasó sigue vigente si una
+        // adenda extendió su fecha fin más allá de hoy (RN 10-12).
+        var contratosIniciados = await db.Contratos
+            .Where(c => c.ColaboradorId == colaborador.Id && c.FechaInicio <= hoy)
+            .Select(c => new { c.Id, c.FechaFin })
+            .ToListAsync(ct);
+
+        var tieneContratoVigente = false;
+        if (contratosIniciados.Count > 0)
+        {
+            var contratoIds = contratosIniciados.Select(c => c.Id).ToList();
+            var maxAdendaPorContrato = (await db.Adendas
+                    .Where(a => contratoIds.Contains(a.ContratoId))
+                    .ToListAsync(ct))
+                .GroupBy(a => a.ContratoId)
+                .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
+
+            tieneContratoVigente = contratosIniciados.Any(c =>
+            {
+                var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
+                var fechaFinVigente = maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin;
+                return fechaFinVigente >= hoy;
+            });
+        }
 
         colaborador.EstadoConfiguracion =
             colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva && tieneContratoVigente
