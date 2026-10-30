@@ -146,6 +146,9 @@ public class DocumentosService(RpsDbContext db, IWebHostEnvironment env, Liquida
 
         var detalle = detalleResultado.Valor!;
 
+        if (detalle.Estado != EstadoLiquidacion.Pagada)
+            return DocumentoErrores.LiquidacionNoPagada;
+
         var contenido = new System.Text.StringBuilder()
             .AppendLine("COMPROBANTE DE PAGO")
             .AppendLine($"Colaborador: {detalle.ColaboradorId}")

@@ -17,6 +17,11 @@ public static class HonorarioErrores
             "Honorario.TransicionInvalida",
             $"No se puede {accion} un honorario en estado '{estadoActual}'.");
 
+    public static readonly Error PerteneceALiquidacion =
+        Error.Conflicto(
+            "Honorario.PerteneceALiquidacion",
+            "Este honorario ya está agrupado en una liquidación. Págalo marcando esa liquidación como pagada.");
+
     // ===== Validaciones =====
 
     public static readonly Error PeriodoInvalido =

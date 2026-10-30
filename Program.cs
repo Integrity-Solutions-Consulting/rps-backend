@@ -15,6 +15,8 @@ using rps_backend.Features.Documentos.Api;
 using rps_backend.Features.Documentos.Application;
 using rps_backend.Features.Exportaciones.Api;
 using rps_backend.Features.Exportaciones.Application;
+using rps_backend.Features.Feriados.Api;
+using rps_backend.Features.Feriados.Application;
 using rps_backend.Features.Honorarios.Api;
 using rps_backend.Features.Honorarios.Application;
 using rps_backend.Features.Liquidaciones.Api;
@@ -46,6 +48,8 @@ builder.Services.AddScoped<ConfiguracionService>();
 builder.Services.AddScoped<DocumentosService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<ExportacionesService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<FeriadosService>();
 
 var app = builder.Build();
 
@@ -67,5 +71,6 @@ app.MapDocumentosEndpoints();
 app.MapComprobantesEndpoints();
 app.MapDashboardEndpoints();
 app.MapExportacionesEndpoints();
+app.MapFeriadosEndpoints();
 
 app.Run();

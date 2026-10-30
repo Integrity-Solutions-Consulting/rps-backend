@@ -220,4 +220,24 @@ GET {{rps_backend_HostAddress}}/api/exportaciones/liquidaciones?periodo=2026-11-
 ### Exportar listado de colaboradores a CSV
 GET {{rps_backend_HostAddress}}/api/exportaciones/colaboradores
 
+### Importar feriados nacionales de Ecuador de un año (desde Nager.Date, idempotente)
+POST {{rps_backend_HostAddress}}/api/feriados/importar/2026
+
+### Listar feriados
+GET {{rps_backend_HostAddress}}/api/feriados
+Accept: application/json
+
+### Crear feriado manual (ej. traslado por decreto)
+POST {{rps_backend_HostAddress}}/api/feriados
+Content-Type: application/json
+
+{
+  "fecha": "2026-05-25",
+  "nombre": "Batalla de Pichincha (trasladado)"
+}
+
+### Eliminar feriado
+@feriadoId = REEMPLAZAR-CON-ID
+DELETE {{rps_backend_HostAddress}}/api/feriados/{{feriadoId}}
+
 ###

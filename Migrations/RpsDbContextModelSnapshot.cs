@@ -395,6 +395,37 @@ namespace rps_backend.Migrations
                         });
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Feriados.Domain.Feriado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre");
+
+                    b.HasKey("Id")
+                        .HasName("pk_feriado");
+
+                    b.HasIndex("Fecha")
+                        .IsUnique()
+                        .HasDatabaseName("ix_feriado_fecha");
+
+                    b.ToTable("feriado", "rps");
+                });
+
             modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.Honorario", b =>
                 {
                     b.Property<Guid>("Id")

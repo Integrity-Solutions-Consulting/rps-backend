@@ -44,9 +44,11 @@ public class AnticiposService(RpsDbContext db)
         if (request.Monto is null || request.Monto <= 0)
             return AnticipoErrores.MontoInvalido;
 
-        var tope = (await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct)).TopeMaximoAnticipo;
-        if (request.Monto > tope)
-            return AnticipoErrores.MontoExcedeTope(tope);
+        // Si por algún motivo la fila semilla de configuración no existe (ambiente mal migrado),
+        // no se bloquea la creación de anticipos: se omite el tope en vez de tirar un 500.
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (config is not null && request.Monto > config.TopeMaximoAnticipo)
+            return AnticipoErrores.MontoExcedeTope(config.TopeMaximoAnticipo);
 
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
         if (colaborador is null)
@@ -70,6 +72,15 @@ public class AnticiposService(RpsDbContext db)
 
     public async Task<Resultado<AnticipoResponse>> AprobarAsync(Guid colaboradorId, Guid anticipoId, CancellationToken ct)
     {
+        var colaborador = await db.ColaboradoresRps.AsNoTracking().FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
+        if (colaborador is null)
+            return AnticipoErrores.ColaboradorNoEncontrado(colaboradorId);
+
+        // Un anticipo Aprobado de un colaborador inactivo nunca se descuenta (GenerarAsync solo
+        // considera colaboradores activos): aprobarlo lo dejaría pendiente para siempre.
+        if (!colaborador.Activo)
+            return AnticipoErrores.ColaboradorDesactivado;
+
         var anticipo = await db.Anticipos.FirstOrDefaultAsync(a => a.Id == anticipoId && a.ColaboradorId == colaboradorId, ct);
         if (anticipo is null)
             return AnticipoErrores.NoEncontrado(anticipoId);

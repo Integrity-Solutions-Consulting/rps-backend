@@ -19,6 +19,11 @@ public static class DocumentoErrores
     public static Error LiquidacionNoEncontrado(Guid id) =>
         Error.NoEncontrado("Documento.LiquidacionNoEncontrado", $"No existe una liquidación con id '{id}'.");
 
+    // ===== Conflictos =====
+
+    public static readonly Error LiquidacionNoPagada =
+        Error.Conflicto("Documento.LiquidacionNoPagada", "Solo se puede generar el comprobante de una liquidación ya pagada.");
+
     // ===== Validaciones =====
 
     public static readonly Error ReferenciaInvalida =

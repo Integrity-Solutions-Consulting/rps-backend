@@ -27,10 +27,13 @@ public class HonorariosService(RpsDbContext db)
         if (colaboradorIds.Count == 0)
             return new GenerarHonorariosResponse(0, 0);
 
+        // Orden determinístico: con varios contratos simultáneos del mismo colaborador, decide
+        // de forma estable cuál honorario absorbe primero un anticipo pendiente.
         var contratosVigentes = await db.Contratos.AsNoTracking()
             .Where(c => colaboradorIds.Contains(c.ColaboradorId)
                 && c.FechaInicio <= finPeriodo
                 && (c.FechaFin == null || c.FechaFin >= periodo))
+            .OrderBy(c => c.ColaboradorId).ThenBy(c => c.FechaInicio).ThenBy(c => c.Id)
             .ToListAsync(ct);
 
         var frecuenciaPorColaborador = (await db.ColaboradoresFrecuencia.AsNoTracking()
@@ -54,6 +57,13 @@ public class HonorariosService(RpsDbContext db)
             .Select(h => (h.ColaboradorId, h.ContratoId, h.NumeroPago))
             .ToHashSet();
 
+        // Feriados del período, para contar días hábiles al prorratear contratos parciales.
+        var feriados = (await db.Feriados.AsNoTracking()
+                .Where(f => f.Fecha >= periodo && f.Fecha <= finPeriodo)
+                .Select(f => f.Fecha)
+                .ToListAsync(ct))
+            .ToHashSet();
+
         var nuevos = new List<Honorario>();
         var omitidos = 0;
 
@@ -63,9 +73,27 @@ public class HonorariosService(RpsDbContext db)
             if (!frecuenciaPorColaborador.TryGetValue(contrato.ColaboradorId, out var frecuencia))
                 continue;
 
-            List<(int NumeroPago, decimal Monto)> pagos = frecuencia == Frecuencia.DosPagos
-                ? [(1, contrato.Tarifa / 2), (2, contrato.Tarifa / 2)]
-                : [(1, contrato.Tarifa)];
+            // Prorratea por días hábiles (lunes-viernes, sin feriados) cuando el contrato no
+            // cubre la ventana completa; si la cubre, el factor es 1 y el monto sale igual que
+            // antes. DosPagos prorratea cada quincena por separado (día 1-15 y 16-fin de mes);
+            // el primer pago se redondea y el segundo absorbe el resto para que, cuando el
+            // contrato cubre todo el mes, la suma sea exactamente la Tarifa.
+            List<(int NumeroPago, decimal Monto)> pagos;
+            if (frecuencia == Frecuencia.DosPagos)
+            {
+                var mitadBase = Math.Round(contrato.Tarifa / 2, 2, MidpointRounding.AwayFromZero);
+                var finQuincena1 = new DateOnly(periodo.Year, periodo.Month, 15);
+                var inicioQuincena2 = finQuincena1.AddDays(1);
+
+                var pago1 = CalcularMontoProrrateado(mitadBase, periodo, finQuincena1, contrato.FechaInicio, contrato.FechaFin, feriados);
+                var pago2 = CalcularMontoProrrateado(contrato.Tarifa - mitadBase, inicioQuincena2, finPeriodo, contrato.FechaInicio, contrato.FechaFin, feriados);
+                pagos = [(1, pago1), (2, pago2)];
+            }
+            else
+            {
+                var monto = CalcularMontoProrrateado(contrato.Tarifa, periodo, finPeriodo, contrato.FechaInicio, contrato.FechaFin, feriados);
+                pagos = [(1, monto)];
+            }
 
             foreach (var (numeroPago, montoBruto) in pagos)
             {
@@ -169,6 +197,11 @@ public class HonorariosService(RpsDbContext db)
         if (honorario.Estado != EstadoHonorario.Aprobado)
             return HonorarioErrores.TransicionInvalida(honorario.Estado, "marcar como pagado");
 
+        // Si ya está agrupado en una liquidación, se paga pagando esa liquidación, no aquí
+        // directo: evita que la liquidación quede Generada con un honorario ya Pagado por fuera.
+        if (honorario.LiquidacionId is not null)
+            return HonorarioErrores.PerteneceALiquidacion;
+
         honorario.Estado = EstadoHonorario.Pagado;
         honorario.ActualizadoEn = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -185,13 +218,70 @@ public class HonorariosService(RpsDbContext db)
         if (honorario.Estado is not (EstadoHonorario.Pendiente or EstadoHonorario.Aprobado))
             return HonorarioErrores.TransicionInvalida(honorario.Estado, "anular");
 
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Los anticipos que este honorario había descontado vuelven a Aprobado: el adelanto
+        // sigue pendiente de cobrarse, no se pierde porque se anuló el honorario que lo cubría.
+        var anticiposDescontados = await db.Anticipos
+            .Where(a => a.HonorarioId == honorario.Id)
+            .ToListAsync(ct);
+
+        foreach (var anticipo in anticiposDescontados)
+        {
+            anticipo.Estado = EstadoAnticipo.Aprobado;
+            anticipo.HonorarioId = null;
+            anticipo.ActualizadoEn = DateTime.UtcNow;
+        }
+
         honorario.Estado = EstadoHonorario.Anulado;
         honorario.ActualizadoEn = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+
+        await tx.CommitAsync(ct);
 
         return AResponse(honorario);
     }
 
     private static HonorarioResponse AResponse(Honorario h) => new(
         h.Id, h.ColaboradorId, h.ContratoId, h.Periodo, h.NumeroPago, h.Monto, h.Descuento, h.Estado, h.CreadoEn, h.ActualizadoEn);
+
+    // montoBase prorrateado por la fracción de días hábiles de [ventanaInicio, ventanaFin] que el
+    // contrato efectivamente cubre. Si el contrato cubre toda la ventana, el factor es 1 y el
+    // monto sale igual a montoBase (sin cambio de comportamiento para el caso ya existente).
+    private static decimal CalcularMontoProrrateado(
+        decimal montoBase, DateOnly ventanaInicio, DateOnly ventanaFin,
+        DateOnly contratoInicio, DateOnly? contratoFin, HashSet<DateOnly> feriados)
+    {
+        var totalHabiles = ContarDiasHabiles(ventanaInicio, ventanaFin, feriados);
+        if (totalHabiles == 0)
+            return 0m;
+
+        var trabajadoInicio = contratoInicio > ventanaInicio ? contratoInicio : ventanaInicio;
+        var finEfectivo = contratoFin ?? ventanaFin;
+        var trabajadoFin = finEfectivo < ventanaFin ? finEfectivo : ventanaFin;
+
+        var diasTrabajados = ContarDiasHabiles(trabajadoInicio, trabajadoFin, feriados);
+
+        return Math.Round(montoBase * diasTrabajados / totalHabiles, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static int ContarDiasHabiles(DateOnly desde, DateOnly hasta, HashSet<DateOnly> feriados)
+    {
+        if (hasta < desde)
+            return 0;
+
+        var contador = 0;
+        for (var fecha = desde; fecha <= hasta; fecha = fecha.AddDays(1))
+        {
+            if (fecha.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                continue;
+
+            if (feriados.Contains(fecha))
+                continue;
+
+            contador++;
+        }
+
+        return contador;
+    }
 }

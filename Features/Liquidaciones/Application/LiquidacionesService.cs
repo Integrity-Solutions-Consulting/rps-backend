@@ -98,7 +98,11 @@ public class LiquidacionesService(RpsDbContext db)
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        var honorarios = await db.Honorarios.Where(h => h.LiquidacionId == id).ToListAsync(ct);
+        // Solo los que siguen Aprobado: uno que se anuló después de generar la liquidación
+        // (vía HonorariosService.AnularAsync) no debe resucitar a Pagado.
+        var honorarios = await db.Honorarios
+            .Where(h => h.LiquidacionId == id && h.Estado == EstadoHonorario.Aprobado)
+            .ToListAsync(ct);
         foreach (var honorario in honorarios)
         {
             honorario.Estado = EstadoHonorario.Pagado;

@@ -4,6 +4,7 @@ using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Configuracion.Domain;
 using rps_backend.Features.Contratos.Domain;
 using rps_backend.Features.Documentos.Domain;
+using rps_backend.Features.Feriados.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Liquidaciones.Domain;
 namespace rps_backend.Persistence;
@@ -23,6 +24,7 @@ public class RpsDbContext : DbContext
     public DbSet<Anticipo> Anticipos => Set<Anticipo>();
     public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
     public DbSet<Documento> Documentos => Set<Documento>();
+    public DbSet<Feriado> Feriados => Set<Feriado>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
