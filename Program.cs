@@ -37,7 +37,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddProblemDetails();
-builder.Services.AddDataProtection().SetApplicationName("rps-backend");
+// Llaves persistidas en la misma base (no en un llavero efímero): sobreviven a redeploys y a
+// contenedores nuevos, que de otro modo dejarían indescifrables los números de cuenta ya guardados.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<RpsDbContext>()
+    .SetApplicationName("rps-backend");
 builder.Services.AddSingleton<CuentaBancariaProtector>();
 builder.Services.AddScoped<ColaboradoresService>();
 builder.Services.AddScoped<ContratosService>();

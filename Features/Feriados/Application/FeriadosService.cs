@@ -72,6 +72,12 @@ public class FeriadosService(RpsDbContext db, IHttpClientFactory httpClientFacto
         if (feriado is null)
             return FeriadoErrores.NoEncontrado(id);
 
+        // Si ya se generaron honorarios del período que contiene esta fecha, borrarlo dejaría
+        // ese cálculo inconsistente contra una futura corrida del mismo período.
+        var mesFeriado = new DateOnly(feriado.Fecha.Year, feriado.Fecha.Month, 1);
+        if (await db.Honorarios.AnyAsync(h => h.Periodo == mesFeriado, ct))
+            return FeriadoErrores.YaUsadoEnHonorarios(feriado.Fecha);
+
         db.Feriados.Remove(feriado);
         await db.SaveChangesAsync(ct);
 

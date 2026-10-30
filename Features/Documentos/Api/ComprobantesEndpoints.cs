@@ -12,7 +12,8 @@ public static class ComprobantesEndpoints
                 (await service.GenerarComprobanteLiquidacionAsync(id, ct)).AHttp(d => TypedResults.Created($"/api/documentos/{d.Id}", d)))
             .WithTags("Documentos")
             .Produces<DocumentoResponse>(StatusCodes.Status201Created)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         return app;
     }

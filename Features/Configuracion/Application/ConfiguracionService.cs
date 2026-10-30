@@ -10,7 +10,7 @@ public class ConfiguracionService(RpsDbContext db)
 {
     public async Task<ConfiguracionResponse> ObtenerAsync(CancellationToken ct)
     {
-        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var config = await ObtenerOCrearAsync(ct);
         return AResponse(config);
     }
 
@@ -40,7 +40,7 @@ public class ConfiguracionService(RpsDbContext db)
         if (request.TopeMaximoAnticipo is null || request.TopeMaximoAnticipo <= 0)
             return ConfiguracionErrores.TopeMaximoAnticipoInvalido;
 
-        var config = await db.ConfiguracionGlobal.FirstAsync(ct);
+        var config = await ObtenerOCrearAsync(ct);
 
         config.RazonSocial = razonSocial;
         config.Ruc = ruc;
@@ -54,6 +54,21 @@ public class ConfiguracionService(RpsDbContext db)
         await db.SaveChangesAsync(ct);
 
         return AResponse(config);
+    }
+
+    // Ambiente sin la fila semilla (migración no aplicada todavía): se autogenera con los
+    // valores por defecto en vez de que GET/PUT /api/configuracion truene con un 500.
+    private async Task<Domain.ConfiguracionGlobal> ObtenerOCrearAsync(CancellationToken ct)
+    {
+        var config = await db.ConfiguracionGlobal.FirstOrDefaultAsync(ct);
+        if (config is not null)
+            return config;
+
+        config = new Domain.ConfiguracionGlobal();
+        db.ConfiguracionGlobal.Add(config);
+        await db.SaveChangesAsync(ct);
+
+        return config;
     }
 
     private static ConfiguracionResponse AResponse(Domain.ConfiguracionGlobal c) => new(

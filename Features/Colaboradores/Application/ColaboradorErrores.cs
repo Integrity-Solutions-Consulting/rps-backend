@@ -27,6 +27,11 @@ public static class ColaboradorErrores
     public static readonly Error FrecuenciaNoModificable =
         Error.Conflicto("Colaborador.FrecuenciaNoModificable", "Solo se pueden editar o eliminar frecuencias de meses que aún no empiezan.");
 
+    public static readonly Error CuentaBancariaConflicto =
+        Error.Conflicto(
+            "Colaborador.CuentaBancariaConflicto",
+            "No se pudo registrar la cuenta bancaria por una modificación concurrente. Intenta de nuevo.");
+
     public static readonly Error TieneAnticiposAprobadosPendientes =
         Error.Conflicto(
             "Colaborador.TieneAnticiposAprobadosPendientes",

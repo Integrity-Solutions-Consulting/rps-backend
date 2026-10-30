@@ -16,7 +16,9 @@ public class ConfiguracionGlobal
 
     public int DiaPagoDosPagos2 { get; set; } = 30;
 
-    public decimal TopeMaximoAnticipo { get; set; }
+    // Alto a propósito: así no bloquea la creación de anticipos hasta que se configure un
+    // tope real más bajo (mismo valor que siembra la migración AddConfiguracionGlobal).
+    public decimal TopeMaximoAnticipo { get; set; } = 1_000_000.00m;
 
     public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 }

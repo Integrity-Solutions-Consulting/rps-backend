@@ -11,13 +11,17 @@ public static class ColaboradorEstado
     // Consulta la base, así que se llama después de guardar los cambios de frecuencia/cuenta/contrato.
     public static async Task RecalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
     {
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
+
+        // Vigente, no "alguna vez registrada": una frecuencia con VigenteDesdeMes futuro no
+        // cuenta todavía (mismo criterio que ColaboradoresService.ConstruirDetalleAsync).
         var tieneFrecuencia = await db.ColaboradoresFrecuencia
-            .AnyAsync(f => f.ColaboradorId == colaborador.Id, ct);
+            .AnyAsync(f => f.ColaboradorId == colaborador.Id && f.VigenteDesdeMes <= mesActual, ct);
 
         var tieneCuentaActiva = await db.CuentasBancarias
             .AnyAsync(c => c.ColaboradorId == colaborador.Id && c.Activa, ct);
 
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
         var tieneContratoVigente = await db.Contratos
             .AnyAsync(c => c.ColaboradorId == colaborador.Id
                 && c.FechaInicio <= hoy

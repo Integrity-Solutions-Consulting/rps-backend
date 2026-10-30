@@ -275,7 +275,17 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
             NumeroCuentaCifrado = protector.Cifrar(numeroCuenta)
         };
         db.CuentasBancarias.Add(cuenta);
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Dos solicitudes concurrentes pueden pasar ambas la desactivación de arriba antes
+            // de insertar: el índice único filtrado (colaborador_id) WHERE activa=true es la red final.
+            return ColaboradorErrores.CuentaBancariaConflicto;
+        }
 
         await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
         await db.SaveChangesAsync(ct);

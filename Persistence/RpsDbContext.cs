@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Anticipos.Domain;
 using rps_backend.Features.Colaboradores.Domain;
@@ -9,7 +10,9 @@ using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Liquidaciones.Domain;
 namespace rps_backend.Persistence;
 
-public class RpsDbContext : DbContext
+// IDataProtectionKeyContext: las llaves de cifrado de CuentaBancariaProtector se guardan en la
+// misma base (persisten entre redeploys/contenedores nuevos), no en un llavero efímero en memoria.
+public class RpsDbContext : DbContext, IDataProtectionKeyContext
 {
     public RpsDbContext(DbContextOptions<RpsDbContext> options) : base(options)
     {
@@ -25,6 +28,8 @@ public class RpsDbContext : DbContext
     public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
     public DbSet<Documento> Documentos => Set<Documento>();
     public DbSet<Feriado> Feriados => Set<Feriado>();
+    public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys
+        => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

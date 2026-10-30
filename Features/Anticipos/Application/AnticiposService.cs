@@ -97,6 +97,9 @@ public class AnticiposService(RpsDbContext db)
 
     public async Task<Resultado<AnticipoResponse>> AnularAsync(Guid colaboradorId, Guid anticipoId, CancellationToken ct)
     {
+        if (!await db.ColaboradoresRps.AnyAsync(c => c.Id == colaboradorId, ct))
+            return AnticipoErrores.ColaboradorNoEncontrado(colaboradorId);
+
         var anticipo = await db.Anticipos.FirstOrDefaultAsync(a => a.Id == anticipoId && a.ColaboradorId == colaboradorId, ct);
         if (anticipo is null)
             return AnticipoErrores.NoEncontrado(anticipoId);
