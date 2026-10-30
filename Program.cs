@@ -17,10 +17,14 @@ using rps_backend.Features.Exportaciones.Api;
 using rps_backend.Features.Exportaciones.Application;
 using rps_backend.Features.Feriados.Api;
 using rps_backend.Features.Feriados.Application;
+using rps_backend.Features.Historial.Api;
+using rps_backend.Features.Historial.Application;
 using rps_backend.Features.Honorarios.Api;
 using rps_backend.Features.Honorarios.Application;
 using rps_backend.Features.Liquidaciones.Api;
 using rps_backend.Features.Liquidaciones.Application;
+using rps_backend.Features.Notificaciones.Api;
+using rps_backend.Features.Notificaciones.Application;
 using rps_backend.Features.Proyectos.Api;
 using rps_backend.Features.Proyectos.Application;
 using rps_backend.Persistence;
@@ -59,6 +63,12 @@ builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<ExportacionesService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<FeriadosService>();
+// Agregados para conectar el frontend: cancelar/restaurar honorarios, exportación por corte,
+// notificaciones e historial.
+builder.Services.AddScoped<CancelacionCondicionesService>();
+builder.Services.AddScoped<ExportacionesPagoService>();
+builder.Services.AddScoped<NotificacionesService>();
+builder.Services.AddScoped<HistorialService>();
 
 var app = builder.Build();
 
@@ -83,5 +93,9 @@ app.MapDocumentosMensualesEndpoints();
 app.MapDashboardEndpoints();
 app.MapExportacionesEndpoints();
 app.MapFeriadosEndpoints();
+app.MapCancelacionCondicionesEndpoints();
+app.MapExportacionesPagoEndpoints();
+app.MapNotificacionesEndpoints();
+app.MapHistorialEndpoints();
 
 app.Run();
