@@ -211,4 +211,13 @@ Accept: application/json
 GET {{rps_backend_HostAddress}}/api/dashboard?periodo=2026-11-01
 Accept: application/json
 
+### Exportar honorarios a CSV (periodo opcional)
+GET {{rps_backend_HostAddress}}/api/exportaciones/honorarios?periodo=2026-11-01
+
+### Exportar liquidaciones a CSV (periodo opcional)
+GET {{rps_backend_HostAddress}}/api/exportaciones/liquidaciones?periodo=2026-11-01
+
+### Exportar listado de colaboradores a CSV
+GET {{rps_backend_HostAddress}}/api/exportaciones/colaboradores
+
 ###

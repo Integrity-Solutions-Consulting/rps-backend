@@ -13,6 +13,8 @@ using rps_backend.Features.Dashboard.Api;
 using rps_backend.Features.Dashboard.Application;
 using rps_backend.Features.Documentos.Api;
 using rps_backend.Features.Documentos.Application;
+using rps_backend.Features.Exportaciones.Api;
+using rps_backend.Features.Exportaciones.Application;
 using rps_backend.Features.Honorarios.Api;
 using rps_backend.Features.Honorarios.Application;
 using rps_backend.Features.Liquidaciones.Api;
@@ -43,6 +45,7 @@ builder.Services.AddScoped<AnticiposService>();
 builder.Services.AddScoped<ConfiguracionService>();
 builder.Services.AddScoped<DocumentosService>();
 builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<ExportacionesService>();
 
 var app = builder.Build();
 
@@ -63,5 +66,6 @@ app.MapConfiguracionEndpoints();
 app.MapDocumentosEndpoints();
 app.MapComprobantesEndpoints();
 app.MapDashboardEndpoints();
+app.MapExportacionesEndpoints();
 
 app.Run();
