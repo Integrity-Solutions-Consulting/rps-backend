@@ -53,7 +53,15 @@ public class FeriadosService(RpsDbContext db, IHttpClientFactory httpClientFacto
         var feriado = new Feriado { Fecha = request.Fecha.Value, Nombre = nombre };
 
         db.Feriados.Add(feriado);
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return FeriadoErrores.FechaDuplicada(request.Fecha.Value);
+        }
 
         return new FeriadoResponse(feriado.Id, feriado.Fecha, feriado.Nombre, feriado.CreadoEn);
     }
@@ -83,7 +91,10 @@ public class FeriadosService(RpsDbContext db, IHttpClientFactory httpClientFacto
             cliente.Timeout = TimeSpan.FromSeconds(20);
             externos = await cliente.GetFromJsonAsync<List<FeriadoExterno>>(string.Format(UrlFeriadosEcuador, anio), ct);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        // TaskCanceledException solo se trata como "fuente no disponible" si vino del timeout
+        // del HttpClient; si el que canceló fue el propio ct del llamador, se deja propagar.
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException
+            || (ex is TaskCanceledException && !ct.IsCancellationRequested))
         {
             return FeriadoErrores.FuenteNoDisponible;
         }

@@ -103,6 +103,11 @@ public class HonorariosService(RpsDbContext db)
                     continue;
                 }
 
+                // Sin superposición con esa ventana (ej. contrato que empieza después de la
+                // quincena 1 en DosPagos): no hay nada que pagar, no se crea un registro en 0.
+                if (montoBruto == 0m)
+                    continue;
+
                 var honorario = new Honorario
                 {
                     ColaboradorId = contrato.ColaboradorId,
@@ -200,7 +205,7 @@ public class HonorariosService(RpsDbContext db)
         // Si ya está agrupado en una liquidación, se paga pagando esa liquidación, no aquí
         // directo: evita que la liquidación quede Generada con un honorario ya Pagado por fuera.
         if (honorario.LiquidacionId is not null)
-            return HonorarioErrores.PerteneceALiquidacion;
+            return HonorarioErrores.PerteneceALiquidacion("marcar como pagado");
 
         honorario.Estado = EstadoHonorario.Pagado;
         honorario.ActualizadoEn = DateTime.UtcNow;
@@ -217,6 +222,11 @@ public class HonorariosService(RpsDbContext db)
 
         if (honorario.Estado is not (EstadoHonorario.Pendiente or EstadoHonorario.Aprobado))
             return HonorarioErrores.TransicionInvalida(honorario.Estado, "anular");
+
+        // Si ya está agrupado en una liquidación, anularlo por fuera dejaría el MontoTotal de
+        // esa liquidación desactualizado (nadie lo recalcula). Hay que resolverlo a ese nivel.
+        if (honorario.LiquidacionId is not null)
+            return HonorarioErrores.PerteneceALiquidacion("anular");
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 

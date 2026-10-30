@@ -44,18 +44,18 @@ public class AnticiposService(RpsDbContext db)
         if (request.Monto is null || request.Monto <= 0)
             return AnticipoErrores.MontoInvalido;
 
-        // Si por algún motivo la fila semilla de configuración no existe (ambiente mal migrado),
-        // no se bloquea la creación de anticipos: se omite el tope en vez de tirar un 500.
-        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstOrDefaultAsync(ct);
-        if (config is not null && request.Monto > config.TopeMaximoAnticipo)
-            return AnticipoErrores.MontoExcedeTope(config.TopeMaximoAnticipo);
-
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
         if (colaborador is null)
             return AnticipoErrores.ColaboradorNoEncontrado(colaboradorId);
 
         if (!colaborador.Activo)
             return AnticipoErrores.ColaboradorDesactivado;
+
+        // Si por algún motivo la fila semilla de configuración no existe (ambiente mal migrado),
+        // no se bloquea la creación de anticipos: se omite el tope en vez de tirar un 500.
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (config is not null && request.Monto > config.TopeMaximoAnticipo)
+            return AnticipoErrores.MontoExcedeTope(config.TopeMaximoAnticipo);
 
         var anticipo = new Anticipo
         {

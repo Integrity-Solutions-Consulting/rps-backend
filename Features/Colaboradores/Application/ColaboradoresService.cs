@@ -52,7 +52,17 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         };
 
         db.ColaboradoresRps.Add(colaborador);
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Dos altas concurrentes con el mismo TmrColaboradorId pueden pasar el AnyAsync de
+            // arriba antes de que cualquiera guarde: el índice único de la base es la red final.
+            return ColaboradorErrores.TmrDuplicado(tmrColaboradorId);
+        }
 
         return await ConstruirDetalleAsync(colaborador, ct);
     }
@@ -83,6 +93,11 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
         if (colaborador.Activo != activo)
         {
+            // Un anticipo Aprobado de un colaborador inactivo nunca se descuenta (GenerarAsync
+            // solo considera colaboradores activos): desactivar lo dejaría varado para siempre.
+            if (!activo && await db.Anticipos.AnyAsync(a => a.ColaboradorId == id && a.Estado == EstadoAnticipo.Aprobado, ct))
+                return ColaboradorErrores.TieneAnticiposAprobadosPendientes;
+
             colaborador.Activo = activo;
             colaborador.ActualizadoEn = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
@@ -131,7 +146,15 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
             VigenteDesdeMes = vigenteDesdeMes
         };
         db.ColaboradoresFrecuencia.Add(frecuencia);
-        await db.SaveChangesAsync(ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return ColaboradorErrores.FrecuenciaDuplicada(vigenteDesdeMes);
+        }
 
         await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
         await db.SaveChangesAsync(ct);

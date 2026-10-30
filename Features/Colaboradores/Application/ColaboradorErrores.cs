@@ -27,6 +27,11 @@ public static class ColaboradorErrores
     public static readonly Error FrecuenciaNoModificable =
         Error.Conflicto("Colaborador.FrecuenciaNoModificable", "Solo se pueden editar o eliminar frecuencias de meses que aún no empiezan.");
 
+    public static readonly Error TieneAnticiposAprobadosPendientes =
+        Error.Conflicto(
+            "Colaborador.TieneAnticiposAprobadosPendientes",
+            "El colaborador tiene anticipos aprobados sin descontar. Anúlalos o espera a que se descuenten antes de desactivarlo.");
+
     // ===== Validaciones =====
 
     public static readonly Error TmrIdInvalido =
