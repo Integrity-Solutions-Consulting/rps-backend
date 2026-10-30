@@ -13,8 +13,9 @@ public class DashboardService(RpsDbContext db)
         var honorarios = await ObtenerHonorariosResumenAsync(periodo, ct);
         var liquidaciones = await ObtenerLiquidacionesResumenAsync(periodo, ct);
         var anticipos = await ObtenerAnticiposResumenAsync(ct);
+        var contratosPorVencer = await ObtenerContratosPorVencerAsync(ct);
 
-        return new DashboardResponse(periodo, colaboradores, honorarios, liquidaciones, anticipos);
+        return new DashboardResponse(periodo, colaboradores, honorarios, liquidaciones, anticipos, contratosPorVencer);
     }
 
     private async Task<ColaboradoresResumen> ObtenerColaboradoresResumenAsync(CancellationToken ct)
@@ -33,13 +34,10 @@ public class DashboardService(RpsDbContext db)
         if (periodo is not null)
             query = query.Where(h => h.Periodo == periodo);
 
-        var pendientes = await query.CountAsync(h => h.Estado == EstadoHonorario.Pendiente, ct);
-        var aprobados = await query.CountAsync(h => h.Estado == EstadoHonorario.Aprobado, ct);
-        var pagados = await query.CountAsync(h => h.Estado == EstadoHonorario.Pagado, ct);
-        var anulados = await query.CountAsync(h => h.Estado == EstadoHonorario.Anulado, ct);
-        var montoNetoTotal = await query.Where(h => h.Estado != EstadoHonorario.Anulado).SumAsync(h => h.Monto, ct);
+        var cantidad = await query.CountAsync(ct);
+        var netoTotal = await query.SumAsync(h => h.Neto, ct);
 
-        return new HonorariosResumen(pendientes, aprobados, pagados, anulados, montoNetoTotal);
+        return new HonorariosResumen(cantidad, netoTotal);
     }
 
     private async Task<LiquidacionesResumen> ObtenerLiquidacionesResumenAsync(DateOnly? periodo, CancellationToken ct)
@@ -48,19 +46,50 @@ public class DashboardService(RpsDbContext db)
         if (periodo is not null)
             query = query.Where(l => l.Periodo == periodo);
 
-        var generadas = await query.CountAsync(l => l.Estado == EstadoLiquidacion.Generada, ct);
-        var pagadas = await query.CountAsync(l => l.Estado == EstadoLiquidacion.Pagada, ct);
+        var revisadas = await query.CountAsync(l => l.Revisado, ct);
+        var sinRevisar = await query.CountAsync(l => !l.Revisado, ct);
 
-        return new LiquidacionesResumen(generadas, pagadas);
+        return new LiquidacionesResumen(revisadas, sinRevisar);
     }
 
     private async Task<AnticiposResumen> ObtenerAnticiposResumenAsync(CancellationToken ct)
     {
-        var aprobados = db.Anticipos.Where(a => a.Estado == EstadoAnticipo.Aprobado);
+        var anticipos = await db.AnticiposAdicionales.AsNoTracking().ToListAsync(ct);
+        if (anticipos.Count == 0)
+            return new AnticiposResumen(0, 0m);
 
-        var cantidad = await aprobados.CountAsync(ct);
-        var monto = await aprobados.SumAsync(a => a.Monto, ct);
+        var anticipoIds = anticipos.Select(a => a.Id).ToList();
+        var cuotasPorAnticipo = (await db.CuotasRecuperacion.AsNoTracking()
+                .Where(c => anticipoIds.Contains(c.AnticipoAdicionalId))
+                .ToListAsync(ct))
+            .GroupBy(c => c.AnticipoAdicionalId)
+            .ToDictionary(g => g.Key, g => g.Sum(c => c.Importe));
 
-        return new AnticiposResumen(cantidad, monto);
+        var saldos = anticipos.Select(a => a.Monto - cuotasPorAnticipo.GetValueOrDefault(a.Id, 0m)).Where(s => s > 0).ToList();
+
+        return new AnticiposResumen(saldos.Count, saldos.Sum());
+    }
+
+    private async Task<ContratosPorVencerResumen> ObtenerContratosPorVencerAsync(CancellationToken ct)
+    {
+        var contratos = await db.Contratos.AsNoTracking().ToListAsync(ct);
+        var contratoIds = contratos.Select(c => c.Id).ToList();
+
+        var maxAdendaPorContrato = (await db.Adendas.AsNoTracking()
+                .Where(a => contratoIds.Contains(a.ContratoId))
+                .ToListAsync(ct))
+            .GroupBy(a => a.ContratoId)
+            .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
+
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var fechasFinVigente = contratos.Select(c =>
+        {
+            var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
+            return maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin;
+        }).ToList();
+
+        int ContarHasta(int dias) => fechasFinVigente.Count(f => f >= hoy && f <= hoy.AddDays(dias));
+
+        return new ContratosPorVencerResumen(ContarHasta(30), ContarHasta(15), ContarHasta(7));
     }
 }

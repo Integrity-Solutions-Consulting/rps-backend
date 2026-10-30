@@ -93,10 +93,21 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
         if (colaborador.Activo != activo)
         {
-            // Un anticipo Aprobado de un colaborador inactivo nunca se descuenta (GenerarAsync
-            // solo considera colaboradores activos): desactivar lo dejaría varado para siempre.
-            if (!activo && await db.Anticipos.AnyAsync(a => a.ColaboradorId == id && a.Estado == EstadoAnticipo.Aprobado, ct))
-                return ColaboradorErrores.TieneAnticiposAprobadosPendientes;
+            // Un anticipo adicional con saldo pendiente de un colaborador inactivo nunca se
+            // recupera (HonorariosService.GenerarAsync solo considera colaboradores activos, por
+            // lo que nunca se genera la Liquidación/Corte que aplicaría su cuota): desactivar lo
+            // dejaría varado para siempre.
+            if (!activo)
+            {
+                var anticipoIds = await db.AnticiposAdicionales.Where(a => a.ColaboradorId == id).Select(a => a.Id).ToListAsync(ct);
+                if (anticipoIds.Count > 0)
+                {
+                    var montoTotal = await db.AnticiposAdicionales.Where(a => anticipoIds.Contains(a.Id)).SumAsync(a => a.Monto, ct);
+                    var cuotasAplicadas = await db.CuotasRecuperacion.Where(c => anticipoIds.Contains(c.AnticipoAdicionalId)).SumAsync(c => c.Importe, ct);
+                    if (montoTotal - cuotasAplicadas > 0)
+                        return ColaboradorErrores.TieneAnticiposConSaldoPendiente;
+                }
+            }
 
             colaborador.Activo = activo;
             colaborador.ActualizadoEn = DateTime.UtcNow;

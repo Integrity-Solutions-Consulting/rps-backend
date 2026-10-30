@@ -1,5 +1,9 @@
 @rps_backend_HostAddress = http://localhost:5203
 @colaboradorId = REEMPLAZAR-CON-ID
+@proyectoId = REEMPLAZAR-CON-ID
+@contratoId = REEMPLAZAR-CON-ID
+
+### ===== Colaboradores =====
 
 ### Listar colaboradores (filtros opcionales: ?estado=Pendiente|Configurado &activo=true|false)
 GET {{rps_backend_HostAddress}}/api/colaboradores
@@ -9,7 +13,7 @@ Accept: application/json
 GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}
 Accept: application/json
 
-### Crear colaborador
+### Crear colaborador (vendrá del TMR; por ahora alta manual)
 POST {{rps_backend_HostAddress}}/api/colaboradores
 Content-Type: application/json
 
@@ -18,7 +22,7 @@ Content-Type: application/json
   "clasificacion": "Profesional"
 }
 
-### Actualizar clasificación
+### Actualizar clasificación (Profesional|Junior; define el % de retención de IVA aplicable)
 PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/clasificacion
 Content-Type: application/json
 
@@ -26,13 +30,13 @@ Content-Type: application/json
   "clasificacion": "Junior"
 }
 
-### Desactivar colaborador (no borra nada, se puede volver a activar)
+### Desactivar colaborador (bloqueado si tiene anticipos con saldo pendiente)
 POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/desactivar
 
 ### Activar colaborador
 POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/activar
 
-### Listar frecuencias
+### Listar frecuencias de pago (DosPagos|FinDeMes)
 GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/frecuencias
 Accept: application/json
 
@@ -68,6 +72,70 @@ Content-Type: application/json
   "numeroCuenta": "2201234567"
 }
 
+### ===== Proyectos =====
+
+### Listar proyectos (filtro opcional: ?activo=true|false)
+GET {{rps_backend_HostAddress}}/api/proyectos
+Accept: application/json
+
+### Obtener un proyecto
+GET {{rps_backend_HostAddress}}/api/proyectos/{{proyectoId}}
+Accept: application/json
+
+### Crear proyecto (vendrá del TMR; por ahora alta manual)
+POST {{rps_backend_HostAddress}}/api/proyectos
+Content-Type: application/json
+
+{
+  "nombre": "Proyecto A",
+  "cliente": "Cliente XYZ"
+}
+
+### Editar proyecto
+PUT {{rps_backend_HostAddress}}/api/proyectos/{{proyectoId}}
+Content-Type: application/json
+
+{
+  "nombre": "Proyecto A",
+  "cliente": "Cliente XYZ S.A."
+}
+
+### Desactivar proyecto
+POST {{rps_backend_HostAddress}}/api/proyectos/{{proyectoId}}/desactivar
+
+### Activar proyecto
+POST {{rps_backend_HostAddress}}/api/proyectos/{{proyectoId}}/activar
+
+### ===== Asignaciones (colaborador <-> proyecto) =====
+
+### Listar asignaciones de un colaborador
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/asignaciones
+Accept: application/json
+
+### Crear asignación (determina los días reconocidos para honorarios; sin fechaSalida = en curso)
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/asignaciones
+Content-Type: application/json
+
+{
+  "proyectoId": "{{proyectoId}}",
+  "fechaInicio": "2026-10-01",
+  "fechaSalida": null
+}
+
+### Finalizar asignación (registra la salida del proyecto)
+@asignacionId = REEMPLAZAR-CON-ID
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/asignaciones/{{asignacionId}}/finalizar
+Content-Type: application/json
+
+{
+  "fechaSalida": "2026-11-20"
+}
+
+### Eliminar asignación
+DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/asignaciones/{{asignacionId}}
+
+### ===== Contratos (por colaborador x proyecto) =====
+
 ### Listar contratos (filtro opcional: ?vigente=true|false)
 GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos
 Accept: application/json
@@ -77,28 +145,61 @@ POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos
 Content-Type: application/json
 
 {
-  "tipoServicio": "Consultoría",
-  "tarifa": 1500.00,
+  "proyectoId": "{{proyectoId}}",
   "fechaInicio": "2026-10-01",
-  "fechaFin": null
+  "fechaFin": "2027-12-31",
+  "referencia": "CT-2026-001",
+  "observaciones": null
 }
 
-### Editar contrato
-@contratoId = REEMPLAZAR-CON-ID
+### Editar contrato (fecha fin original, referencia u observaciones)
 PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}
 Content-Type: application/json
 
 {
-  "tipoServicio": "Consultoría",
-  "tarifa": 1700.00,
-  "fechaInicio": "2026-10-01",
-  "fechaFin": "2026-12-31"
+  "fechaFin": "2027-12-31",
+  "referencia": "CT-2026-001",
+  "observaciones": "Actualizado"
 }
 
 ### Eliminar contrato (solo si aún no ha empezado)
 DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}
 
-### Generar honorarios de un período (1 por contrato vigente; DosPagos = 2 líneas, FinDeMes = 1)
+### Listar adendas de un contrato
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}/adendas
+Accept: application/json
+
+### Registrar adenda (extiende la fecha fin vigente sin borrar la original)
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/contratos/{{contratoId}}/adendas
+Content-Type: application/json
+
+{
+  "nuevaFechaFin": "2028-06-30",
+  "observaciones": "Extensión acordada"
+}
+
+### ===== Condiciones económicas (importe mensual, modalidad Neto|MasIva) =====
+
+### Listar condiciones económicas de un colaborador
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/condiciones-economicas
+Accept: application/json
+
+### Crear condición económica (vigente desde el mes indicado; conserva historial)
+POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/condiciones-economicas
+Content-Type: application/json
+
+{
+  "proyectoId": "{{proyectoId}}",
+  "contratoId": "{{contratoId}}",
+  "importeMensual": 600.00,
+  "modalidad": "Neto",
+  "mesInicioVigencia": "2026-10-01",
+  "observaciones": null
+}
+
+### ===== Honorarios (cálculo tributario por colaborador x proyecto x período) =====
+
+### Generar honorarios de un período (1 por colaborador x proyecto con condición económica vigente)
 POST {{rps_backend_HostAddress}}/api/honorarios/generar
 Content-Type: application/json
 
@@ -106,7 +207,7 @@ Content-Type: application/json
   "periodo": "2026-11-01"
 }
 
-### Listar honorarios (filtros opcionales: ?periodo=&colaboradorId=&estado=)
+### Listar honorarios (filtros opcionales: ?periodo=&colaboradorId=)
 GET {{rps_backend_HostAddress}}/api/honorarios?periodo=2026-11-01
 Accept: application/json
 
@@ -115,16 +216,12 @@ Accept: application/json
 GET {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}
 Accept: application/json
 
-### Aprobar honorario (Pendiente -> Aprobado)
-POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/aprobar
+### Eliminar honorario (solo si aún no fue incluido en una liquidación)
+DELETE {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}
 
-### Marcar como pagado (Aprobado -> Pagado)
-POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/pagar
+### ===== Liquidaciones (consolidado por colaborador x período, con cortes Quincena/FinDeMes) =====
 
-### Anular (Pendiente o Aprobado -> Anulado)
-POST {{rps_backend_HostAddress}}/api/honorarios/{{honorarioId}}/anular
-
-### Generar liquidaciones de un período (1 por colaborador, agrupa honorarios Aprobado sin liquidar)
+### Generar liquidaciones de un período (1 por colaborador, agrupa honorarios sin liquidar)
 POST {{rps_backend_HostAddress}}/api/liquidaciones/generar
 Content-Type: application/json
 
@@ -132,42 +229,59 @@ Content-Type: application/json
   "periodo": "2026-11-01"
 }
 
-### Listar liquidaciones (filtros opcionales: ?periodo=&colaboradorId=&estado=)
+### Listar liquidaciones (filtros opcionales: ?periodo=&colaboradorId=&revisado=true|false)
 GET {{rps_backend_HostAddress}}/api/liquidaciones?periodo=2026-11-01
 Accept: application/json
 
-### Obtener una liquidación (incluye los honorarios agrupados)
+### Obtener una liquidación (incluye sus cortes Quincena/FinDeMes)
 @liquidacionId = REEMPLAZAR-CON-ID
 GET {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}
 Accept: application/json
 
-### Marcar como pagada (Generada -> Pagada; propaga Pagado a sus honorarios)
-POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/pagar
+### Marcar como revisada (control interno previo a exportar; no equivale a pago realizado)
+POST {{rps_backend_HostAddress}}/api/liquidaciones/{{liquidacionId}}/revisar
 
-### Crear anticipo
+### ===== Anticipos adicionales (con plan de recuperación en cuotas) =====
+
+### Crear anticipo (valida contra el % máximo del neto mensual completo, configuracion.porcentajeMaximoAnticipo)
 POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos
 Content-Type: application/json
 
 {
-  "monto": 150.00
+  "monto": 150.00,
+  "observaciones": null
 }
 
-### Listar anticipos (filtro opcional: ?estado=Pendiente|Aprobado|Descontado|Anulado)
+### Listar anticipos de un colaborador
 GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos
 Accept: application/json
 
-### Aprobar anticipo (Pendiente -> Aprobado; a partir de aquí se descuenta solo al generar honorarios)
+### Obtener un anticipo
 @anticipoId = REEMPLAZAR-CON-ID
-POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}/aprobar
+GET {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}
+Accept: application/json
 
-### Anular anticipo (Pendiente o Aprobado -> Anulado)
-POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}/anular
+### Registrar / reemplazar el plan de recuperación (suma de cuotas debe igualar el monto; todas del mismo período)
+PUT {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}/plan
+Content-Type: application/json
+
+{
+  "cuotas": [
+    { "periodo": "2026-11-01", "corte": "Quincena", "importe": 75.00 },
+    { "periodo": "2026-11-01", "corte": "FinDeMes", "importe": 75.00 }
+  ]
+}
+
+### Eliminar anticipo (bloqueado si ya tiene cuotas registradas)
+DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/anticipos/{{anticipoId}}
+
+### ===== Configuración global =====
 
 ### Obtener configuracion global
 GET {{rps_backend_HostAddress}}/api/configuracion
 Accept: application/json
 
-### Actualizar configuracion global
+### Actualizar configuracion global (porcentajes de IVA/retenciones y tope de anticipo, mantenidos por Contabilidad)
 PUT {{rps_backend_HostAddress}}/api/configuracion
 Content-Type: application/json
 
@@ -178,10 +292,16 @@ Content-Type: application/json
   "diaPagoFinDeMes": 30,
   "diaPagoDosPagos1": 15,
   "diaPagoDosPagos2": 30,
-  "topeMaximoAnticipo": 500.00
+  "porcentajeMaximoAnticipo": 100,
+  "porcentajeIva": 15,
+  "porcentajeRetencionFuente": 10,
+  "porcentajeRetencionIvaProfesional": 100,
+  "porcentajeRetencionIvaJunior": 70
 }
 
-### Registrar documento mensual (check de factura/nota de venta emitida; sin archivo adjunto)
+### ===== Documentos mensuales (check manual de factura/nota de venta; sin archivo adjunto) =====
+
+### Registrar documento mensual (check de factura/nota de venta emitida)
 POST {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/documentos-mensuales
 Content-Type: application/json
 
@@ -210,13 +330,17 @@ Content-Type: application/json
 ### Eliminar documento mensual (vuelve a "faltante")
 DELETE {{rps_backend_HostAddress}}/api/colaboradores/{{colaboradorId}}/documentos-mensuales/{{documentoMensualId}}
 
+### ===== Dashboard =====
+
 ### Dashboard: resumen general (sin periodo, cuenta todo)
 GET {{rps_backend_HostAddress}}/api/dashboard
 Accept: application/json
 
-### Dashboard: resumen de un periodo (honorarios/liquidaciones filtrados; colaboradores/anticipos no)
+### Dashboard: resumen de un periodo (honorarios/liquidaciones filtrados; colaboradores/anticipos/contratos-por-vencer no)
 GET {{rps_backend_HostAddress}}/api/dashboard?periodo=2026-11-01
 Accept: application/json
+
+### ===== Exportaciones =====
 
 ### Exportar honorarios a CSV (periodo opcional)
 GET {{rps_backend_HostAddress}}/api/exportaciones/honorarios?periodo=2026-11-01
@@ -226,6 +350,8 @@ GET {{rps_backend_HostAddress}}/api/exportaciones/liquidaciones?periodo=2026-11-
 
 ### Exportar listado de colaboradores a CSV
 GET {{rps_backend_HostAddress}}/api/exportaciones/colaboradores
+
+### ===== Feriados (nacionales Ecuador; ya no se usan en el cálculo de honorarios, que usa días calendario) =====
 
 ### Importar feriados nacionales de Ecuador de un año (desde Nager.Date, idempotente)
 POST {{rps_backend_HostAddress}}/api/feriados/importar/2026

@@ -32,10 +32,10 @@ public static class ColaboradorErrores
             "Colaborador.CuentaBancariaConflicto",
             "No se pudo registrar la cuenta bancaria por una modificación concurrente. Intenta de nuevo.");
 
-    public static readonly Error TieneAnticiposAprobadosPendientes =
+    public static readonly Error TieneAnticiposConSaldoPendiente =
         Error.Conflicto(
-            "Colaborador.TieneAnticiposAprobadosPendientes",
-            "El colaborador tiene anticipos aprobados sin descontar. Anúlalos o espera a que se descuenten antes de desactivarlo.");
+            "Colaborador.TieneAnticiposConSaldoPendiente",
+            "El colaborador tiene anticipos adicionales con saldo pendiente de recuperar. Actívalo de nuevo cuando se complete su plan de recuperación.");
 
     // ===== Validaciones =====
 

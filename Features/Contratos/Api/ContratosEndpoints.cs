@@ -32,15 +32,26 @@ public static class ContratosEndpoints
                 (await service.EditarAsync(id, contratoId, request, ct)).AHttp(TypedResults.Ok))
             .Produces<ContratoResponse>()
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
-        // Solo contratos que aún no han empezado; uno vigente se finaliza editando su fecha de fin.
+        // Solo contratos que aún no han empezado; uno vigente se finaliza con una adenda o editando su fecha fin.
         group.MapDelete("/{contratoId:guid}", async (Guid id, Guid contratoId, ContratosService service, CancellationToken ct) =>
                 (await service.EliminarAsync(id, contratoId, ct)).AHttp(_ => TypedResults.NoContent()))
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
+
+        group.MapGet("/{contratoId:guid}/adendas", async (Guid id, Guid contratoId, ContratosService service, CancellationToken ct) =>
+                (await service.ListarAdendasAsync(id, contratoId, ct)).AHttp(TypedResults.Ok))
+            .Produces<List<AdendaResponse>>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // Extiende la fecha fin vigente del contrato sin borrar la fecha original (RN 10-12).
+        group.MapPost("/{contratoId:guid}/adendas", async (Guid id, Guid contratoId, CrearAdendaRequest request, ContratosService service, CancellationToken ct) =>
+                (await service.RegistrarAdendaAsync(id, contratoId, request, ct)).AHttp(a => TypedResults.Created($"/api/colaboradores/{id}/contratos/{contratoId}/adendas/{a.Id}", a)))
+            .Produces<AdendaResponse>(StatusCodes.Status201Created)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         return app;
     }

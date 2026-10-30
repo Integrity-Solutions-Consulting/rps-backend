@@ -15,30 +15,18 @@ public static class HonorariosEndpoints
             .Produces<GenerarHonorariosResponse>()
             .ProducesValidationProblem();
 
-        // GET /api/honorarios?periodo=2026-11-01&colaboradorId=...&estado=Pendiente
-        group.MapGet("/", async (DateOnly? periodo, Guid? colaboradorId, EstadoHonorario? estado, HonorariosService service, CancellationToken ct) =>
-                TypedResults.Ok(await service.ListarAsync(periodo, colaboradorId, estado, ct)));
+        // GET /api/honorarios?periodo=2026-11-01&colaboradorId=...
+        group.MapGet("/", async (DateOnly? periodo, Guid? colaboradorId, HonorariosService service, CancellationToken ct) =>
+                TypedResults.Ok(await service.ListarAsync(periodo, colaboradorId, ct)));
 
         group.MapGet("/{id:guid}", async (Guid id, HonorariosService service, CancellationToken ct) =>
                 (await service.ObtenerAsync(id, ct)).AHttp(TypedResults.Ok))
             .Produces<HonorarioResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        group.MapPost("/{id:guid}/aprobar", async (Guid id, HonorariosService service, CancellationToken ct) =>
-                (await service.AprobarAsync(id, ct)).AHttp(TypedResults.Ok))
-            .Produces<HonorarioResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
-
-        group.MapPost("/{id:guid}/pagar", async (Guid id, HonorariosService service, CancellationToken ct) =>
-                (await service.MarcarPagadoAsync(id, ct)).AHttp(TypedResults.Ok))
-            .Produces<HonorarioResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
-
-        group.MapPost("/{id:guid}/anular", async (Guid id, HonorariosService service, CancellationToken ct) =>
-                (await service.AnularAsync(id, ct)).AHttp(TypedResults.Ok))
-            .Produces<HonorarioResponse>()
+        group.MapDelete("/{id:guid}", async (Guid id, HonorariosService service, CancellationToken ct) =>
+                (await service.EliminarAsync(id, ct)).AHttp(_ => TypedResults.NoContent()))
+            .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 

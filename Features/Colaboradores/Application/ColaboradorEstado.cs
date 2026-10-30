@@ -22,10 +22,12 @@ public static class ColaboradorEstado
         var tieneCuentaActiva = await db.CuentasBancarias
             .AnyAsync(c => c.ColaboradorId == colaborador.Id && c.Activa, ct);
 
+        // No considera adendas aquí (ver Fase 2: este indicador se reemplaza por "tiene condición
+        // económica vigente", que es la que de verdad habilita el cálculo de honorarios).
         var tieneContratoVigente = await db.Contratos
             .AnyAsync(c => c.ColaboradorId == colaborador.Id
                 && c.FechaInicio <= hoy
-                && (c.FechaFin == null || c.FechaFin >= hoy), ct);
+                && c.FechaFin >= hoy, ct);
 
         colaborador.EstadoConfiguracion =
             colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva && tieneContratoVigente

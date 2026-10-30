@@ -17,6 +17,6 @@ public static class ConfiguracionErrores
     public static Error DiaPagoInvalido(string campo) =>
         Error.Validacion("Configuracion.DiaPagoInvalido", campo, "Debe ser un día válido del mes (1 a 31).");
 
-    public static readonly Error TopeMaximoAnticipoInvalido =
-        Error.Validacion("Configuracion.TopeMaximoAnticipoInvalido", "topeMaximoAnticipo", "Es obligatorio y debe ser mayor a 0.");
+    public static Error PorcentajeInvalido(string campo) =>
+        Error.Validacion("Configuracion.PorcentajeInvalido", campo, "Es obligatorio y debe estar entre 0 y 100.");
 }

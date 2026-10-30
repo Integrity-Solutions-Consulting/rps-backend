@@ -9,7 +9,11 @@ public record ActualizarConfiguracionRequest(
     int? DiaPagoFinDeMes,
     int? DiaPagoDosPagos1,
     int? DiaPagoDosPagos2,
-    decimal? TopeMaximoAnticipo);
+    decimal? PorcentajeMaximoAnticipo,
+    decimal? PorcentajeIva,
+    decimal? PorcentajeRetencionFuente,
+    decimal? PorcentajeRetencionIvaProfesional,
+    decimal? PorcentajeRetencionIvaJunior);
 
 // ===== Responses =====
 
@@ -21,5 +25,9 @@ public record ConfiguracionResponse(
     int DiaPagoFinDeMes,
     int DiaPagoDosPagos1,
     int DiaPagoDosPagos2,
-    decimal TopeMaximoAnticipo,
+    decimal PorcentajeMaximoAnticipo,
+    decimal PorcentajeIva,
+    decimal PorcentajeRetencionFuente,
+    decimal PorcentajeRetencionIvaProfesional,
+    decimal PorcentajeRetencionIvaJunior,
     DateTime ActualizadoEn);

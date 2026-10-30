@@ -27,8 +27,11 @@ public class ConfiguracionGlobalConfiguration : IEntityTypeConfiguration<Configu
             .HasMaxLength(3)
             .IsRequired();
 
-        builder.Property(c => c.TopeMaximoAnticipo)
-            .HasColumnType("numeric(12,2)");
+        builder.Property(c => c.PorcentajeMaximoAnticipo).HasColumnType("numeric(5,2)");
+        builder.Property(c => c.PorcentajeIva).HasColumnType("numeric(5,2)");
+        builder.Property(c => c.PorcentajeRetencionFuente).HasColumnType("numeric(5,2)");
+        builder.Property(c => c.PorcentajeRetencionIvaProfesional).HasColumnType("numeric(5,2)");
+        builder.Property(c => c.PorcentajeRetencionIvaJunior).HasColumnType("numeric(5,2)");
 
         builder.HasData(new ConfiguracionGlobal
         {
@@ -39,7 +42,11 @@ public class ConfiguracionGlobalConfiguration : IEntityTypeConfiguration<Configu
             DiaPagoFinDeMes = 30,
             DiaPagoDosPagos1 = 15,
             DiaPagoDosPagos2 = 30,
-            TopeMaximoAnticipo = 1_000_000.00m,
+            PorcentajeMaximoAnticipo = 100m,
+            PorcentajeIva = 15m,
+            PorcentajeRetencionFuente = 10m,
+            PorcentajeRetencionIvaProfesional = 100m,
+            PorcentajeRetencionIvaJunior = 70m,
             ActualizadoEn = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
     }

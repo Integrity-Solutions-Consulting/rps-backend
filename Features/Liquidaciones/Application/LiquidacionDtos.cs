@@ -11,23 +11,25 @@ public record GenerarLiquidacionesRequest(DateOnly? Periodo);
 
 public record GenerarLiquidacionesResponse(int Generadas, int HonorariosIncluidos);
 
+public record CorteResponse(Guid Id, TipoCorte Tipo, decimal ValorBase, decimal RecuperacionAdicional, decimal ValorPreparado);
+
 public record LiquidacionResponse(
     Guid Id,
     Guid ColaboradorId,
     DateOnly Periodo,
-    decimal MontoTotal,
-    EstadoLiquidacion Estado,
-    DateTime? PagadaEn,
+    decimal NetoConsolidado,
+    bool Revisado,
+    DateTime? RevisadoEn,
     DateTime CreadoEn,
-    DateTime ActualizadoEn);
+    List<CorteResponse> Cortes);
 
 public record LiquidacionDetalleResponse(
     Guid Id,
     Guid ColaboradorId,
     DateOnly Periodo,
-    decimal MontoTotal,
-    EstadoLiquidacion Estado,
-    DateTime? PagadaEn,
+    decimal NetoConsolidado,
+    bool Revisado,
+    DateTime? RevisadoEn,
     DateTime CreadoEn,
-    DateTime ActualizadoEn,
+    List<CorteResponse> Cortes,
     List<HonorarioResponse> Honorarios);

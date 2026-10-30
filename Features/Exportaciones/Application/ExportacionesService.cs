@@ -19,16 +19,22 @@ public class ExportacionesService(RpsDbContext db)
         var filas = await query
             .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new
             {
-                h.Id, h.ColaboradorId, c.TmrColaboradorId, h.Periodo, h.NumeroPago, h.Monto, h.Descuento, h.Estado
+                h.Id, h.ColaboradorId, c.TmrColaboradorId, h.ProyectoId, h.Periodo, h.Modalidad,
+                h.DiasReales, h.DiasReconocidos, h.Subtotal, h.Iva, h.RetencionFuente, h.RetencionIva, h.Neto
             })
-            .OrderBy(f => f.Periodo).ThenBy(f => f.TmrColaboradorId).ThenBy(f => f.NumeroPago)
+            .OrderBy(f => f.Periodo).ThenBy(f => f.TmrColaboradorId)
             .ToListAsync(ct);
 
-        var encabezados = new[] { "id", "colaborador_id", "tmr_colaborador_id", "periodo", "numero_pago", "monto", "descuento", "estado" };
+        var encabezados = new[]
+        {
+            "id", "colaborador_id", "tmr_colaborador_id", "proyecto_id", "periodo", "modalidad",
+            "dias_reales", "dias_reconocidos", "subtotal", "iva", "retencion_fuente", "retencion_iva", "neto"
+        };
         var contenido = ConstruirCsv(encabezados, filas.Select(f => new[]
         {
-            f.Id.ToString(), f.ColaboradorId.ToString(), f.TmrColaboradorId, FormatFecha(f.Periodo),
-            f.NumeroPago.ToString(CultureInfo.InvariantCulture), FormatMonto(f.Monto), FormatMonto(f.Descuento), f.Estado.ToString()
+            f.Id.ToString(), f.ColaboradorId.ToString(), f.TmrColaboradorId, f.ProyectoId.ToString(), FormatFecha(f.Periodo), f.Modalidad.ToString(),
+            f.DiasReales.ToString(CultureInfo.InvariantCulture), f.DiasReconocidos.ToString(CultureInfo.InvariantCulture),
+            FormatMonto(f.Subtotal), FormatMonto(f.Iva), FormatMonto(f.RetencionFuente), FormatMonto(f.RetencionIva), FormatMonto(f.Neto)
         }));
 
         var nombreArchivo = periodo is null ? "honorarios_todos.csv" : $"honorarios_{periodo:yyyy-MM}.csv";
@@ -44,16 +50,16 @@ public class ExportacionesService(RpsDbContext db)
         var filas = await query
             .Join(db.ColaboradoresRps.AsNoTracking(), l => l.ColaboradorId, c => c.Id, (l, c) => new
             {
-                l.Id, l.ColaboradorId, c.TmrColaboradorId, l.Periodo, l.MontoTotal, l.Estado, l.PagadaEn
+                l.Id, l.ColaboradorId, c.TmrColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado
             })
             .OrderBy(f => f.Periodo).ThenBy(f => f.TmrColaboradorId)
             .ToListAsync(ct);
 
-        var encabezados = new[] { "id", "colaborador_id", "tmr_colaborador_id", "periodo", "monto_total", "estado", "pagada_en" };
+        var encabezados = new[] { "id", "colaborador_id", "tmr_colaborador_id", "periodo", "neto_consolidado", "revisado" };
         var contenido = ConstruirCsv(encabezados, filas.Select(f => new[]
         {
             f.Id.ToString(), f.ColaboradorId.ToString(), f.TmrColaboradorId, FormatFecha(f.Periodo),
-            FormatMonto(f.MontoTotal), f.Estado.ToString(), FormatFechaHora(f.PagadaEn)
+            FormatMonto(f.NetoConsolidado), f.Revisado ? "true" : "false"
         }));
 
         var nombreArchivo = periodo is null ? "liquidaciones_todas.csv" : $"liquidaciones_{periodo:yyyy-MM}.csv";

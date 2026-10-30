@@ -37,8 +37,20 @@ public class ConfiguracionService(RpsDbContext db)
         if (request.DiaPagoDosPagos2 is not (>= 1 and <= 31))
             return ConfiguracionErrores.DiaPagoInvalido("diaPagoDosPagos2");
 
-        if (request.TopeMaximoAnticipo is null || request.TopeMaximoAnticipo <= 0)
-            return ConfiguracionErrores.TopeMaximoAnticipoInvalido;
+        if (request.PorcentajeMaximoAnticipo is not (>= 0 and <= 100))
+            return ConfiguracionErrores.PorcentajeInvalido("porcentajeMaximoAnticipo");
+
+        if (request.PorcentajeIva is not (>= 0 and <= 100))
+            return ConfiguracionErrores.PorcentajeInvalido("porcentajeIva");
+
+        if (request.PorcentajeRetencionFuente is not (>= 0 and <= 100))
+            return ConfiguracionErrores.PorcentajeInvalido("porcentajeRetencionFuente");
+
+        if (request.PorcentajeRetencionIvaProfesional is not (>= 0 and <= 100))
+            return ConfiguracionErrores.PorcentajeInvalido("porcentajeRetencionIvaProfesional");
+
+        if (request.PorcentajeRetencionIvaJunior is not (>= 0 and <= 100))
+            return ConfiguracionErrores.PorcentajeInvalido("porcentajeRetencionIvaJunior");
 
         var config = await ObtenerOCrearAsync(ct);
 
@@ -48,7 +60,11 @@ public class ConfiguracionService(RpsDbContext db)
         config.DiaPagoFinDeMes = request.DiaPagoFinDeMes.Value;
         config.DiaPagoDosPagos1 = request.DiaPagoDosPagos1.Value;
         config.DiaPagoDosPagos2 = request.DiaPagoDosPagos2.Value;
-        config.TopeMaximoAnticipo = request.TopeMaximoAnticipo.Value;
+        config.PorcentajeMaximoAnticipo = request.PorcentajeMaximoAnticipo.Value;
+        config.PorcentajeIva = request.PorcentajeIva.Value;
+        config.PorcentajeRetencionFuente = request.PorcentajeRetencionFuente.Value;
+        config.PorcentajeRetencionIvaProfesional = request.PorcentajeRetencionIvaProfesional.Value;
+        config.PorcentajeRetencionIvaJunior = request.PorcentajeRetencionIvaJunior.Value;
         config.ActualizadoEn = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
@@ -73,5 +89,6 @@ public class ConfiguracionService(RpsDbContext db)
 
     private static ConfiguracionResponse AResponse(Domain.ConfiguracionGlobal c) => new(
         c.Id, c.RazonSocial, c.Ruc, c.Moneda, c.DiaPagoFinDeMes, c.DiaPagoDosPagos1, c.DiaPagoDosPagos2,
-        c.TopeMaximoAnticipo, c.ActualizadoEn);
+        c.PorcentajeMaximoAnticipo, c.PorcentajeIva, c.PorcentajeRetencionFuente,
+        c.PorcentajeRetencionIvaProfesional, c.PorcentajeRetencionIvaJunior, c.ActualizadoEn);
 }
