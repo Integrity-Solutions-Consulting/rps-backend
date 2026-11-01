@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Anticipos.Domain;
+using rps_backend.Features.Auth.Domain;
 using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Configuracion.Domain;
 using rps_backend.Features.Contratos.Domain;
@@ -35,6 +36,12 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
     public DbSet<DocumentoMensual> DocumentosMensuales => Set<DocumentoMensual>();
     public DbSet<Feriado> Feriados => Set<Feriado>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
+    public DbSet<Rol> Roles => Set<Rol>();
+    public DbSet<UsuarioRol> UsuariosRoles => Set<UsuarioRol>();
+    public DbSet<Sesion> Sesiones => Set<Sesion>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<TokenBlacklist> TokenBlacklist => Set<TokenBlacklist>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys
         => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 

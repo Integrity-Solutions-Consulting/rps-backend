@@ -125,6 +125,239 @@ namespace rps_backend.Migrations
                         });
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTime>("ExpiraEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira_en");
+
+                    b.Property<Guid>("FamiliaToken")
+                        .HasColumnType("uuid")
+                        .HasColumnName("familia_token");
+
+                    b.Property<bool>("Revocado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("revocado");
+
+                    b.Property<Guid>("SesionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sesion_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<bool>("Usado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("usado");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_token");
+
+                    b.HasIndex("FamiliaToken")
+                        .HasDatabaseName("ix_refresh_token_familia_token");
+
+                    b.HasIndex("SesionId")
+                        .HasDatabaseName("ix_refresh_token_sesion_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refresh_token_token_hash");
+
+                    b.HasIndex("UsuarioId")
+                        .HasDatabaseName("ix_refresh_token_usuario_id");
+
+                    b.ToTable("refresh_token", "rps");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.Rol", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("activo");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("nombre");
+
+                    b.HasKey("Id")
+                        .HasName("pk_rol");
+
+                    b.HasIndex("Nombre")
+                        .IsUnique()
+                        .HasDatabaseName("ix_rol_nombre");
+
+                    b.ToTable("rol", "rps");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.Sesion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activa")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activa");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTime>("UltimaActividad")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultima_actividad");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sesion");
+
+                    b.HasIndex("UsuarioId")
+                        .HasDatabaseName("ix_sesion_usuario_id");
+
+                    b.ToTable("sesion", "rps");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.TokenBlacklist", b =>
+                {
+                    b.Property<string>("Jti")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("jti");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTime>("ExpiraEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira_en");
+
+                    b.HasKey("Jti")
+                        .HasName("pk_token_blacklist");
+
+                    b.ToTable("token_blacklist", "rps");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.Usuario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("activo");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTime?>("BloqueadoHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bloqueado_hasta");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<bool>("DebeCambiarPassword")
+                        .HasColumnType("boolean")
+                        .HasColumnName("debe_cambiar_password");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("HashPassword")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("hash_password");
+
+                    b.Property<int>("IntentosFallidos")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("intentos_fallidos");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("nombre");
+
+                    b.HasKey("Id")
+                        .HasName("pk_usuario");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("ix_usuario_email");
+
+                    b.ToTable("usuario", "rps");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.UsuarioRol", b =>
+                {
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.Property<Guid>("RolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rol_id");
+
+                    b.Property<DateTime>("AsignadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("asignado_en");
+
+                    b.HasKey("UsuarioId", "RolId")
+                        .HasName("pk_usuario_rol");
+
+                    b.HasIndex("RolId")
+                        .HasDatabaseName("ix_usuario_rol_rol_id");
+
+                    b.ToTable("usuario_rol", "rps");
+                });
+
             modelBuilder.Entity("rps_backend.Features.Colaboradores.Domain.ColaboradorFrecuencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -864,6 +1097,54 @@ namespace rps_backend.Migrations
                         .HasConstraintName("fk_cuota_recuperacion_anticipo_adicional_anticipo_adicional_id");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.RefreshToken", b =>
+                {
+                    b.HasOne("rps_backend.Features.Auth.Domain.Sesion", null)
+                        .WithMany()
+                        .HasForeignKey("SesionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_token_sesiones_sesion_id");
+
+                    b.HasOne("rps_backend.Features.Auth.Domain.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_token_usuarios_usuario_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.Sesion", b =>
+                {
+                    b.HasOne("rps_backend.Features.Auth.Domain.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sesion_usuarios_usuario_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.UsuarioRol", b =>
+                {
+                    b.HasOne("rps_backend.Features.Auth.Domain.Rol", "Rol")
+                        .WithMany()
+                        .HasForeignKey("RolId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_usuario_rol_rol_rol_id");
+
+                    b.HasOne("rps_backend.Features.Auth.Domain.Usuario", "Usuario")
+                        .WithMany("Roles")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_usuario_rol_usuario_usuario_id");
+
+                    b.Navigation("Rol");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("rps_backend.Features.Colaboradores.Domain.ColaboradorFrecuencia", b =>
                 {
                     b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
@@ -1017,6 +1298,11 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_asignacion_proyectos_proyecto_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Auth.Domain.Usuario", b =>
+                {
+                    b.Navigation("Roles");
                 });
 #pragma warning restore 612, 618
         }
