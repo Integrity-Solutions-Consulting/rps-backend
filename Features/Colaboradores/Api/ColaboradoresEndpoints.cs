@@ -10,9 +10,9 @@ public static class ColaboradoresEndpoints
     {
         var group = app.MapGroup("/api/colaboradores").WithTags("Colaboradores");
 
-        // GET /api/colaboradores?estado=Pendiente&activo=true
-        group.MapGet("/", async (EstadoConfiguracion? estado, bool? activo, ColaboradoresService service, CancellationToken ct) =>
-                TypedResults.Ok(await service.ListarAsync(estado, activo, ct)));
+        // GET /api/colaboradores?estado=Pendiente&activo=true&busqueda=ana
+        group.MapGet("/", async (EstadoConfiguracion? estado, bool? activo, string? busqueda, ColaboradoresService service, CancellationToken ct) =>
+                TypedResults.Ok(await service.ListarAsync(estado, activo, busqueda, ct)));
 
         group.MapGet("/{id:guid}", async (Guid id, ColaboradoresService service, CancellationToken ct) =>
                 (await service.ObtenerAsync(id, ct)).AHttp(TypedResults.Ok))

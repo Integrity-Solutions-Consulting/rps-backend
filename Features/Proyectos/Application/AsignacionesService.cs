@@ -15,9 +15,11 @@ public class AsignacionesService(RpsDbContext db)
 
         return await db.Asignaciones.AsNoTracking()
             .Where(a => a.ColaboradorId == colaboradorId)
-            .Join(db.Proyectos.AsNoTracking(), a => a.ProyectoId, p => p.Id, (a, p) => new AsignacionResponse(
-                a.Id, a.ColaboradorId, a.ProyectoId, p.Nombre, a.FechaInicio, a.FechaSalida))
-            .OrderByDescending(a => a.FechaInicio)
+            .Join(db.Proyectos.AsNoTracking(), a => a.ProyectoId, p => p.Id, (a, p) => new { Asignacion = a, ProyectoNombre = p.Nombre })
+            .OrderByDescending(x => x.Asignacion.FechaInicio)
+            .Select(x => new AsignacionResponse(
+                x.Asignacion.Id, x.Asignacion.ColaboradorId, x.Asignacion.ProyectoId, x.ProyectoNombre, x.Asignacion.FechaInicio,
+                x.Asignacion.FechaSalida, x.Asignacion.SincronizadaEn, x.Asignacion.EliminadaEnOrigen))
             .ToListAsync(ct);
     }
 
@@ -62,7 +64,7 @@ public class AsignacionesService(RpsDbContext db)
         db.Asignaciones.Add(asignacion);
         await db.SaveChangesAsync(ct);
 
-        return new AsignacionResponse(asignacion.Id, colaboradorId, proyecto.Id, proyecto.Nombre, asignacion.FechaInicio, asignacion.FechaSalida);
+        return new AsignacionResponse(asignacion.Id, colaboradorId, proyecto.Id, proyecto.Nombre, asignacion.FechaInicio, asignacion.FechaSalida, asignacion.SincronizadaEn, asignacion.EliminadaEnOrigen);
     }
 
     public async Task<Resultado<AsignacionResponse>> FinalizarAsync(
@@ -82,7 +84,7 @@ public class AsignacionesService(RpsDbContext db)
         await db.SaveChangesAsync(ct);
 
         var proyecto = await db.Proyectos.AsNoTracking().FirstAsync(p => p.Id == asignacion.ProyectoId, ct);
-        return new AsignacionResponse(asignacion.Id, colaboradorId, proyecto.Id, proyecto.Nombre, asignacion.FechaInicio, asignacion.FechaSalida);
+        return new AsignacionResponse(asignacion.Id, colaboradorId, proyecto.Id, proyecto.Nombre, asignacion.FechaInicio, asignacion.FechaSalida, asignacion.SincronizadaEn, asignacion.EliminadaEnOrigen);
     }
 
     public async Task<Resultado<bool>> EliminarAsync(Guid colaboradorId, Guid asignacionId, CancellationToken ct)

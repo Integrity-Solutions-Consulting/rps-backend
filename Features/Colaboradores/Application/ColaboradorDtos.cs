@@ -14,9 +14,18 @@ public record RegistrarCuentaBancariaRequest(string? Banco, string? TipoCuenta, 
 
 // ===== Responses =====
 
+// Nombres, Apellidos, Identificacion, Correo, ActivoEnTmr, SincronizadoEn y EliminadoEnOrigen son información
+// de origen TMR (solo lectura en RPS); nulos si el registro se creó a mano.
 public record ColaboradorResumenResponse(
     Guid Id,
     string TmrColaboradorId,
+    string? Nombres,
+    string? Apellidos,
+    string? Identificacion,
+    string? Correo,
+    bool? ActivoEnTmr,
+    DateTime? SincronizadoEn,
+    bool EliminadoEnOrigen,
     Clasificacion? Clasificacion,
     EstadoConfiguracion EstadoConfiguracion,
     bool Activo,
@@ -26,6 +35,13 @@ public record ColaboradorResumenResponse(
 public record ColaboradorDetalleResponse(
     Guid Id,
     string TmrColaboradorId,
+    string? Nombres,
+    string? Apellidos,
+    string? Identificacion,
+    string? Correo,
+    bool? ActivoEnTmr,
+    DateTime? SincronizadoEn,
+    bool EliminadoEnOrigen,
     Clasificacion? Clasificacion,
     EstadoConfiguracion EstadoConfiguracion,
     bool Activo,

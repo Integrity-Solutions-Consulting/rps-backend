@@ -8,4 +8,5 @@ public record EditarProyectoRequest(string? Nombre, string? Cliente);
 
 // ===== Responses =====
 
-public record ProyectoResponse(Guid Id, string Nombre, string? Cliente, bool Activo, DateTime CreadoEn);
+public record ProyectoResponse(
+    Guid Id, string? TmrProyectoId, string Nombre, string? Cliente, bool Activo, DateTime? SincronizadoEn, bool EliminadoEnOrigen, DateTime CreadoEn);

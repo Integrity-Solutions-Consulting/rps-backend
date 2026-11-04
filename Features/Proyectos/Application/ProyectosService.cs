@@ -18,7 +18,7 @@ public class ProyectosService(RpsDbContext db)
 
         return await query
             .OrderBy(p => p.Nombre)
-            .Select(p => new ProyectoResponse(p.Id, p.Nombre, p.Cliente, p.Activo, p.CreadoEn))
+            .Select(p => new ProyectoResponse(p.Id, p.TmrProyectoId, p.Nombre, p.Cliente, p.Activo, p.SincronizadoEn, p.EliminadoEnOrigen, p.CreadoEn))
             .ToListAsync(ct);
     }
 
@@ -91,5 +91,6 @@ public class ProyectosService(RpsDbContext db)
         return null;
     }
 
-    private static ProyectoResponse AResponse(Proyecto p) => new(p.Id, p.Nombre, p.Cliente, p.Activo, p.CreadoEn);
+    private static ProyectoResponse AResponse(Proyecto p) =>
+        new(p.Id, p.TmrProyectoId, p.Nombre, p.Cliente, p.Activo, p.SincronizadoEn, p.EliminadoEnOrigen, p.CreadoEn);
 }

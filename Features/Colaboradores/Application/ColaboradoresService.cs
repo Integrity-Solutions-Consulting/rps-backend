@@ -9,7 +9,7 @@ namespace rps_backend.Features.Colaboradores.Application;
 public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector protector)
 {
     public async Task<List<ColaboradorResumenResponse>> ListarAsync(
-        EstadoConfiguracion? estado, bool? activo, CancellationToken ct)
+        EstadoConfiguracion? estado, bool? activo, string? busqueda, CancellationToken ct)
     {
         var query = db.ColaboradoresRps.AsNoTracking();
 
@@ -19,10 +19,23 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         if (activo is not null)
             query = query.Where(c => c.Activo == activo);
 
+        if (!string.IsNullOrWhiteSpace(busqueda))
+        {
+            // Se escapan los comodines de ILIKE para buscar el texto tal cual lo escribió el usuario.
+            var patron = "%" + busqueda.Trim().Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
+            query = query.Where(c =>
+                EF.Functions.ILike(c.Nombres + " " + c.Apellidos, patron, @"\")
+                || EF.Functions.ILike(c.Apellidos + " " + c.Nombres, patron, @"\")
+                || EF.Functions.ILike(c.Identificacion!, patron, @"\"));
+        }
+
         return await query
-            .OrderBy(c => c.CreadoEn)
+            .OrderBy(c => c.Apellidos)
+            .ThenBy(c => c.Nombres)
+            .ThenBy(c => c.CreadoEn)
             .Select(c => new ColaboradorResumenResponse(
-                c.Id, c.TmrColaboradorId, c.Clasificacion, c.EstadoConfiguracion, c.Activo, c.CreadoEn, c.ActualizadoEn))
+                c.Id, c.TmrColaboradorId, c.Nombres, c.Apellidos, c.Identificacion, c.Correo, c.ActivoEnTmr, c.SincronizadoEn,
+                c.EliminadoEnOrigen, c.Clasificacion, c.EstadoConfiguracion, c.Activo, c.CreadoEn, c.ActualizadoEn))
             .ToListAsync(ct);
     }
 
@@ -323,6 +336,13 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         return new ColaboradorDetalleResponse(
             colaborador.Id,
             colaborador.TmrColaboradorId,
+            colaborador.Nombres,
+            colaborador.Apellidos,
+            colaborador.Identificacion,
+            colaborador.Correo,
+            colaborador.ActivoEnTmr,
+            colaborador.SincronizadoEn,
+            colaborador.EliminadoEnOrigen,
             colaborador.Clasificacion,
             colaborador.EstadoConfiguracion,
             colaborador.Activo,
