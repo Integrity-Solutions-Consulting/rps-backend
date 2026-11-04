@@ -23,4 +23,9 @@ public class CondicionEconomica
     public string? Observaciones { get; set; }
 
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
+
+    // Si un cambio programado (mes que aún no empieza) se cancela, no se borra: se marca aquí.
+    // Las consultas normales lo ignoran (filtro global en CondicionEconomicaConfiguration) y se
+    // puede restaurar. Cada cancelación y restauración queda en CondicionEconomicaMovimiento (RN 48).
+    public DateTime? CanceladoEn { get; set; }
 }

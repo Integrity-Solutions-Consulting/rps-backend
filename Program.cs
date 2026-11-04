@@ -26,12 +26,16 @@ using rps_backend.Features.Exportaciones.Api;
 using rps_backend.Features.Exportaciones.Application;
 using rps_backend.Features.Feriados.Api;
 using rps_backend.Features.Feriados.Application;
+using rps_backend.Features.Historial.Api;
+using rps_backend.Features.Historial.Application;
 using rps_backend.Features.Honorarios.Api;
 using rps_backend.Features.Honorarios.Application;
 using rps_backend.Features.IntegracionTmr.Api;
 using rps_backend.Features.IntegracionTmr.Application;
 using rps_backend.Features.Liquidaciones.Api;
 using rps_backend.Features.Liquidaciones.Application;
+using rps_backend.Features.Notificaciones.Api;
+using rps_backend.Features.Notificaciones.Application;
 using rps_backend.Features.Proyectos.Api;
 using rps_backend.Features.Proyectos.Application;
 using rps_backend.Integrations.Tmr;
@@ -143,6 +147,12 @@ if (sincronizacionTmr.Habilitada)
     });
     builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
 }
+// Agregados para conectar el frontend: cancelar/restaurar honorarios, exportación por corte,
+// notificaciones e historial.
+builder.Services.AddScoped<CancelacionCondicionesService>();
+builder.Services.AddScoped<ExportacionesPagoService>();
+builder.Services.AddScoped<NotificacionesService>();
+builder.Services.AddScoped<HistorialService>();
 
 var app = builder.Build();
 
@@ -202,5 +212,9 @@ app.MapDashboardEndpoints();
 app.MapExportacionesEndpoints();
 app.MapFeriadosEndpoints();
 app.MapIntegracionTmrEndpoints();
+app.MapCancelacionCondicionesEndpoints();
+app.MapExportacionesPagoEndpoints();
+app.MapNotificacionesEndpoints();
+app.MapHistorialEndpoints();
 
 app.Run();

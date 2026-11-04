@@ -24,6 +24,13 @@ public class CondicionEconomicaConfiguration : IEntityTypeConfiguration<Condicio
         builder.HasOne<Contrato>().WithMany().HasForeignKey(c => c.ContratoId).OnDelete(DeleteBehavior.Restrict);
 
         // No se repite el mismo mes de vigencia dos veces para la misma relación colaborador-proyecto.
-        builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId, c.MesInicioVigencia }).IsUnique();
+        // Las canceladas no cuentan: se puede registrar otra para ese mes después de cancelar.
+        builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId, c.MesInicioVigencia })
+            .IsUnique()
+            .HasFilter("cancelado_en IS NULL");
+
+        // Las condiciones canceladas no existen para el resto del sistema (honorarios, anticipos,
+        // listados). Solo CancelacionCondicionesService las consulta con IgnoreQueryFilters().
+        builder.HasQueryFilter(c => c.CanceladoEn == null);
     }
 }
