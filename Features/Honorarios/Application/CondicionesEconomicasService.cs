@@ -15,9 +15,11 @@ public class CondicionesEconomicasService(RpsDbContext db)
 
         return await db.CondicionesEconomicas.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId)
-            .Join(db.Proyectos.AsNoTracking(), c => c.ProyectoId, p => p.Id, (c, p) => new CondicionEconomicaResponse(
-                c.Id, c.ColaboradorId, c.ProyectoId, p.Nombre, c.ContratoId, c.ImporteMensual, c.Modalidad, c.MesInicioVigencia, c.Observaciones))
-            .OrderByDescending(c => c.MesInicioVigencia)
+            .Join(db.Proyectos.AsNoTracking(), c => c.ProyectoId, p => p.Id, (c, p) => new { Condicion = c, ProyectoNombre = p.Nombre })
+            .OrderByDescending(x => x.Condicion.MesInicioVigencia)
+            .Select(x => new CondicionEconomicaResponse(
+                x.Condicion.Id, x.Condicion.ColaboradorId, x.Condicion.ProyectoId, x.ProyectoNombre, x.Condicion.ContratoId,
+                x.Condicion.ImporteMensual, x.Condicion.Modalidad, x.Condicion.MesInicioVigencia, x.Condicion.Observaciones))
             .ToListAsync(ct);
     }
 
