@@ -27,6 +27,7 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<rps_backend.Features.Contratos.Domain.Adenda> Adendas => Set<rps_backend.Features.Contratos.Domain.Adenda>();
     public DbSet<Proyecto> Proyectos => Set<Proyecto>();
     public DbSet<Asignacion> Asignaciones => Set<Asignacion>();
+    public DbSet<rps_backend.Features.IntegracionTmr.Domain.CambioTmr> CambiosTmr => Set<rps_backend.Features.IntegracionTmr.Domain.CambioTmr>();
     public DbSet<CondicionEconomica> CondicionesEconomicas => Set<CondicionEconomica>();
     public DbSet<Honorario> Honorarios => Set<Honorario>();
     public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();

@@ -950,6 +950,72 @@ namespace rps_backend.Migrations
                     b.ToTable("honorario", "rps");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.IntegracionTmr.Domain.CambioTmr", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateTime>("DetectadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("detectado_en");
+
+                    b.Property<DateOnly?>("PeriodoDesde")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo_desde");
+
+                    b.Property<Guid?>("ProyectoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("proyecto_id");
+
+                    b.Property<bool>("Revisado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("revisado");
+
+                    b.Property<DateTime?>("RevisadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revisado_en");
+
+                    b.Property<Guid?>("RevisadoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revisado_por_usuario_id");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("tipo");
+
+                    b.Property<string>("ValorAnterior")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("valor_anterior");
+
+                    b.Property<string>("ValorNuevo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("valor_nuevo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cambio_tmr");
+
+                    b.HasIndex("ColaboradorId")
+                        .HasDatabaseName("ix_cambio_tmr_colaborador_id");
+
+                    b.HasIndex("ProyectoId")
+                        .HasDatabaseName("ix_cambio_tmr_proyecto_id");
+
+                    b.HasIndex("Revisado")
+                        .HasDatabaseName("ix_cambio_tmr_revisado");
+
+                    b.ToTable("cambio_tmr", "rps");
+                });
+
             modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.Corte", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1318,6 +1384,22 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_honorario_proyectos_proyecto_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.IntegracionTmr.Domain.CambioTmr", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_cambio_tmr_colaboradores_rps_colaborador_id");
+
+                    b.HasOne("rps_backend.Features.Proyectos.Domain.Proyecto", null)
+                        .WithMany()
+                        .HasForeignKey("ProyectoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_cambio_tmr_proyectos_proyecto_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.Corte", b =>

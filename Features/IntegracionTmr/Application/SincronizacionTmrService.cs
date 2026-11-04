@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Colaboradores.Domain;
+using rps_backend.Features.IntegracionTmr.Domain;
 using rps_backend.Features.Proyectos.Domain;
 using rps_backend.Integrations.Tmr;
 using rps_backend.Persistence;
@@ -44,9 +45,18 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
         await using var transaccion = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlRawAsync($"SELECT pg_advisory_xact_lock({LlaveBloqueo})", ct);
 
+        // En la primera carga todo es nuevo: avisarlo sería ruido, no un cambio de TMR.
+        var esCargaInicial = !await db.Asignaciones.AnyAsync(a => a.SincronizadaEn != null, ct);
+        var cambios = new List<CambioTmr>();
+
         var (conteoProyectos, proyectoIds) = await SincronizarProyectosAsync(proyectos, ahora, ct);
-        var (conteoColaboradores, colaboradorIds) = await SincronizarColaboradoresAsync(colaboradores, ahora, ct);
-        var (conteoAsignaciones, omitidas) = await SincronizarAsignacionesAsync(asignaciones, colaboradorIds, proyectoIds, ahora, ct);
+        var (conteoColaboradores, colaboradorIds) = await SincronizarColaboradoresAsync(colaboradores, cambios, ahora, ct);
+        var (conteoAsignaciones, omitidas) = await SincronizarAsignacionesAsync(asignaciones, colaboradorIds, proyectoIds, cambios, ahora, ct);
+
+        if (esCargaInicial)
+            cambios.Clear();
+
+        db.CambiosTmr.AddRange(cambios);
 
         try
         {
@@ -59,7 +69,7 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
             return SincronizacionTmrErrores.NoGuardado;
         }
 
-        return new SincronizacionTmrResponse(ahora, conteoProyectos, conteoColaboradores, conteoAsignaciones, omitidas);
+        return new SincronizacionTmrResponse(ahora, conteoProyectos, conteoColaboradores, conteoAsignaciones, cambios.Count, omitidas);
     }
 
     private async Task<(ConteoSincronizacion Conteo, Dictionary<int, Guid> Ids)> SincronizarProyectosAsync(
@@ -114,7 +124,7 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
     }
 
     private async Task<(ConteoSincronizacion Conteo, Dictionary<int, Guid> Ids)> SincronizarColaboradoresAsync(
-        List<TmrColaboradorDto> origen, DateTime ahora, CancellationToken ct)
+        List<TmrColaboradorDto> origen, List<CambioTmr> cambios, DateTime ahora, CancellationToken ct)
     {
         var existentes = await db.ColaboradoresRps.ToDictionaryAsync(c => c.TmrColaboradorId, ct);
 
@@ -146,6 +156,13 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
                 actualizados++;
             }
 
+            if (colaborador.ActivoEnTmr is bool activoAnterior && activoAnterior != dto.Activo)
+                cambios.Add(NuevoCambio(TipoCambioTmr.EstadoColaborador, colaborador.Id, null,
+                    DescribirEstado(activoAnterior), DescribirEstado(dto.Activo), null, ahora));
+
+            if (colaborador.EliminadoEnOrigen)
+                cambios.Add(NuevoCambio(TipoCambioTmr.ColaboradorRestaurado, colaborador.Id, null, null, null, null, ahora));
+
             // Activo no se toca: lo administra Contabilidad en RPS. El estado de TMR va en ActivoEnTmr.
             colaborador.Nombres = nombres;
             colaborador.Apellidos = apellidos;
@@ -166,6 +183,7 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
                 colaborador.EliminadoEnOrigen = true;
                 colaborador.ActualizadoEn = ahora;
                 marcados++;
+                cambios.Add(NuevoCambio(TipoCambioTmr.ColaboradorEliminado, colaborador.Id, null, null, null, null, ahora));
             }
         }
 
@@ -174,7 +192,7 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
 
     private async Task<(ConteoSincronizacion Conteo, List<AsignacionOmitida> Omitidas)> SincronizarAsignacionesAsync(
         List<TmrAsignacionDto> origen, Dictionary<int, Guid> colaboradorIds, Dictionary<int, Guid> proyectoIds,
-        DateTime ahora, CancellationToken ct)
+        List<CambioTmr> cambios, DateTime ahora, CancellationToken ct)
     {
         var omitidas = new List<AsignacionOmitida>();
         // Fila inválida con inicio conocido: la asignación que RPS ya tenga se deja como está hasta corregir TMR.
@@ -253,11 +271,28 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
                 };
                 db.Asignaciones.Add(asignacion);
                 creadas++;
+                cambios.Add(NuevoCambio(TipoCambioTmr.AsignacionNueva, clave.ColaboradorId, clave.ProyectoId,
+                    null, DescribirPeriodo(clave.FechaInicio, fechaSalida), MesDe(clave.FechaInicio), ahora));
             }
             else
             {
                 if (asignacion.FechaSalida != fechaSalida || asignacion.EliminadaEnOrigen)
                     actualizadas++;
+
+                if (asignacion.EliminadaEnOrigen)
+                {
+                    cambios.Add(NuevoCambio(TipoCambioTmr.AsignacionRestaurada, clave.ColaboradorId, clave.ProyectoId,
+                        null, DescribirPeriodo(clave.FechaInicio, fechaSalida), MesDe(clave.FechaInicio), ahora));
+                }
+                else if (asignacion.FechaSalida != fechaSalida)
+                {
+                    // Afecta desde el mes de la fecha más temprana entre la anterior y la nueva.
+                    var masTemprana = asignacion.FechaSalida is null || (fechaSalida is not null && fechaSalida < asignacion.FechaSalida)
+                        ? fechaSalida!.Value
+                        : asignacion.FechaSalida.Value;
+                    cambios.Add(NuevoCambio(TipoCambioTmr.FechaSalida, clave.ColaboradorId, clave.ProyectoId,
+                        DescribirFecha(asignacion.FechaSalida), DescribirFecha(fechaSalida), MesDe(masTemprana), ahora));
+                }
 
                 asignacion.FechaSalida = fechaSalida;
                 asignacion.EliminadaEnOrigen = false;
@@ -275,11 +310,36 @@ public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<
             {
                 asignacion.EliminadaEnOrigen = true;
                 marcadas++;
+                cambios.Add(NuevoCambio(TipoCambioTmr.AsignacionEliminada, asignacion.ColaboradorId, asignacion.ProyectoId,
+                    DescribirPeriodo(asignacion.FechaInicio, asignacion.FechaSalida), null, MesDe(asignacion.FechaInicio), ahora));
             }
         }
 
         return (new ConteoSincronizacion(creadas, actualizadas, marcadas), omitidas);
     }
+
+    private static CambioTmr NuevoCambio(
+        TipoCambioTmr tipo, Guid colaboradorId, Guid? proyectoId, string? valorAnterior, string? valorNuevo, DateOnly? periodoDesde, DateTime ahora) =>
+        new()
+        {
+            Tipo = tipo,
+            ColaboradorId = colaboradorId,
+            ProyectoId = proyectoId,
+            ValorAnterior = valorAnterior,
+            ValorNuevo = valorNuevo,
+            PeriodoDesde = periodoDesde,
+            DetectadoEn = ahora
+        };
+
+    private static DateOnly MesDe(DateOnly fecha) => new(fecha.Year, fecha.Month, 1);
+
+    private static string DescribirEstado(bool activo) => activo ? "Activo" : "Inactivo";
+
+    private static string DescribirFecha(DateOnly? fecha) =>
+        fecha?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "Sin salida";
+
+    private static string DescribirPeriodo(DateOnly inicio, DateOnly? salida) =>
+        $"{DescribirFecha(inicio)} a {DescribirFecha(salida)}";
 
     private static bool IntentarLeerFecha(string? valor, out DateOnly fecha) =>
         DateOnly.TryParseExact(valor, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out fecha);

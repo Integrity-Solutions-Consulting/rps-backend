@@ -118,6 +118,7 @@ builder.Services.AddHttpClient<ITmrGateway, TmrHttpGateway>(client =>
     client.DefaultRequestHeaders.Add("X-Api-Key", builder.Configuration["Tmr:ApiKey"]);
 });
 builder.Services.AddScoped<SincronizacionTmrService>();
+builder.Services.AddScoped<CambiosTmrService>();
 
 var app = builder.Build();
 
