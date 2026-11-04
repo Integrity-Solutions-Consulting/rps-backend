@@ -14,6 +14,13 @@ public record SincronizacionTmrResponse(
     int CambiosDetectados,
     List<AsignacionOmitida> AsignacionesOmitidas);
 
+// Desactualizada: con la sincronización automática encendida, lleva más de dos intervalos sin completarse.
+public record SincronizacionTmrEstadoResponse(
+    bool AutomaticaHabilitada,
+    int IntervaloMinutos,
+    DateTime? UltimaSincronizacion,
+    bool Desactualizada);
+
 // TieneLiquidacion y TieneLiquidacionRevisada se refieren a liquidaciones de PeriodoDesde en adelante.
 public record CambioTmrResponse(
     Guid Id,

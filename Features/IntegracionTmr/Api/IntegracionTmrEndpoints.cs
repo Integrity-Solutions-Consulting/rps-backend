@@ -17,6 +17,9 @@ public static class IntegracionTmrEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
+        group.MapGet("/estado", async (SincronizacionTmrService service, CancellationToken ct) =>
+                TypedResults.Ok(await service.ObtenerEstadoAsync(ct)));
+
         // GET /api/integracion-tmr/cambios?revisado=false&colaboradorId=...
         group.MapGet("/cambios", async (bool? revisado, Guid? colaboradorId, CambiosTmrService service, CancellationToken ct) =>
                 TypedResults.Ok(await service.ListarAsync(revisado, colaboradorId, ct)));

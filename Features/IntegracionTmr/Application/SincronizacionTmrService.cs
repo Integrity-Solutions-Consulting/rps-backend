@@ -12,10 +12,22 @@ namespace rps_backend.Features.IntegracionTmr.Application;
 
 // Copia a RPS los colaboradores, proyectos y asignaciones de TMR. RPS nunca escribe en TMR (RN 01) y
 // lo que desaparece de TMR se marca, no se borra (RN 07, RN 22). Se aplica todo o nada.
-public class SincronizacionTmrService(RpsDbContext db, ITmrGateway tmr, ILogger<SincronizacionTmrService> logger)
+public class SincronizacionTmrService(
+    RpsDbContext db, ITmrGateway tmr, SincronizacionTmrOpciones opciones, ILogger<SincronizacionTmrService> logger)
 {
     // Evita que dos sincronizaciones simultáneas creen los mismos registros (RC 04).
     private const long LlaveBloqueo = 7_342_001;
+
+    public async Task<SincronizacionTmrEstadoResponse> ObtenerEstadoAsync(CancellationToken ct)
+    {
+        // Cada sincronización completada actualiza a todos los colaboradores que llegan de TMR.
+        var ultima = await db.ColaboradoresRps.MaxAsync(c => c.SincronizadoEn, ct);
+
+        var desactualizada = opciones.Habilitada
+            && (ultima is null || DateTime.UtcNow - ultima > TimeSpan.FromMinutes(opciones.IntervaloMinutos * 2));
+
+        return new SincronizacionTmrEstadoResponse(opciones.Habilitada, opciones.IntervaloMinutos, ultima, desactualizada);
+    }
 
     public async Task<Resultado<SincronizacionTmrResponse>> SincronizarAsync(CancellationToken ct)
     {

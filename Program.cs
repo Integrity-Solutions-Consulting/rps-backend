@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Quartz;
 using rps_backend.Features.Anticipos.Api;
 using rps_backend.Features.Anticipos.Application;
 using rps_backend.Features.Auth.Api;
@@ -119,6 +120,29 @@ builder.Services.AddHttpClient<ITmrGateway, TmrHttpGateway>(client =>
 });
 builder.Services.AddScoped<SincronizacionTmrService>();
 builder.Services.AddScoped<CambiosTmrService>();
+
+var sincronizacionTmr = builder.Configuration.GetSection("Tmr:Sincronizacion").Get<SincronizacionTmrOpciones>() ?? new SincronizacionTmrOpciones();
+builder.Services.AddSingleton(sincronizacionTmr);
+if (sincronizacionTmr.Habilitada)
+{
+    if (sincronizacionTmr.IntervaloMinutos < 1)
+        throw new InvalidOperationException("Tmr:Sincronizacion:IntervaloMinutos debe ser de al menos 1 minuto.");
+
+    builder.Services.AddQuartz(q =>
+    {
+        var jobKey = new JobKey(nameof(SincronizacionTmrJob));
+        q.AddJob<SincronizacionTmrJob>(j => j.WithIdentity(jobKey));
+        // Si una ejecución se retrasa no se acumulan repeticiones: espera a la siguiente programada.
+        q.AddTrigger(t => t
+            .ForJob(jobKey)
+            .StartNow()
+            .WithSimpleSchedule(s => s
+                .WithInterval(TimeSpan.FromMinutes(sincronizacionTmr.IntervaloMinutos))
+                .RepeatForever()
+                .WithMisfireInstruction(SimpleTriggerMisfireInstruction.NextWithRemainingCount)));
+    });
+    builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
+}
 
 var app = builder.Build();
 
