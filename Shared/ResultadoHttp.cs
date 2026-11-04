@@ -20,6 +20,8 @@ public static class ResultadoHttp
                 new Dictionary<string, string[]> { [error.Campo ?? "general"] = [error.Mensaje] }, extensions: extensiones),
             TipoError.Conflicto => TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict, title: "Conflicto", detail: error.Mensaje, extensions: extensiones),
+            TipoError.ServicioNoDisponible => TypedResults.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable, title: "Servicio no disponible", detail: error.Mensaje, extensions: extensiones),
             _ => throw new InvalidOperationException($"TipoError no soportado: {error.Tipo}")
         };
     }

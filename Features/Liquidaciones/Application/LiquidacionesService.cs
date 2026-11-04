@@ -45,6 +45,7 @@ public class LiquidacionesService(RpsDbContext db)
         var proyectoIds = honorarios.Select(h => h.ProyectoId).Distinct().ToList();
         var asignaciones = await db.Asignaciones.AsNoTracking()
             .Where(a => colaboradorIds.Contains(a.ColaboradorId) && proyectoIds.Contains(a.ProyectoId)
+                && !a.EliminadaEnOrigen
                 && a.FechaInicio <= finPeriodo && (a.FechaSalida == null || a.FechaSalida >= periodo))
             .ToListAsync(ct);
 

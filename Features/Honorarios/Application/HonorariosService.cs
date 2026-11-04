@@ -42,6 +42,7 @@ public class HonorariosService(RpsDbContext db)
 
         var asignaciones = await db.Asignaciones.AsNoTracking()
             .Where(a => colaboradorIds.Contains(a.ColaboradorId)
+                && !a.EliminadaEnOrigen
                 && a.FechaInicio <= finPeriodo
                 && (a.FechaSalida == null || a.FechaSalida >= periodo))
             .ToListAsync(ct);

@@ -407,18 +407,36 @@ namespace rps_backend.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("activo");
 
+                    b.Property<bool?>("ActivoEnTmr")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activo_en_tmr");
+
                     b.Property<DateTime>("ActualizadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("actualizado_en");
+
+                    b.Property<string>("Apellidos")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("apellidos");
 
                     b.Property<string>("Clasificacion")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("clasificacion");
 
+                    b.Property<string>("Correo")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("correo");
+
                     b.Property<DateTime>("CreadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
+
+                    b.Property<bool>("EliminadoEnOrigen")
+                        .HasColumnType("boolean")
+                        .HasColumnName("eliminado_en_origen");
 
                     b.Property<string>("EstadoConfiguracion")
                         .IsRequired()
@@ -427,6 +445,20 @@ namespace rps_backend.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Pendiente")
                         .HasColumnName("estado_configuracion");
+
+                    b.Property<string>("Identificacion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("identificacion");
+
+                    b.Property<string>("Nombres")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombres");
+
+                    b.Property<DateTime?>("SincronizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sincronizado_en");
 
                     b.Property<string>("TmrColaboradorId")
                         .IsRequired()
@@ -1016,6 +1048,10 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<bool>("EliminadaEnOrigen")
+                        .HasColumnType("boolean")
+                        .HasColumnName("eliminada_en_origen");
+
                     b.Property<DateOnly>("FechaInicio")
                         .HasColumnType("date")
                         .HasColumnName("fecha_inicio");
@@ -1027,6 +1063,10 @@ namespace rps_backend.Migrations
                     b.Property<Guid>("ProyectoId")
                         .HasColumnType("uuid")
                         .HasColumnName("proyecto_id");
+
+                    b.Property<DateTime?>("SincronizadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sincronizada_en");
 
                     b.HasKey("Id")
                         .HasName("pk_asignacion");
@@ -1065,14 +1105,31 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<bool>("EliminadoEnOrigen")
+                        .HasColumnType("boolean")
+                        .HasColumnName("eliminado_en_origen");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("nombre");
 
+                    b.Property<DateTime?>("SincronizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sincronizado_en");
+
+                    b.Property<string>("TmrProyectoId")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tmr_proyecto_id");
+
                     b.HasKey("Id")
                         .HasName("pk_proyecto");
+
+                    b.HasIndex("TmrProyectoId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_proyecto_tmr_proyecto_id");
 
                     b.ToTable("proyecto", "rps");
                 });

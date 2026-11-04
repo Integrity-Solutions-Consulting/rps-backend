@@ -27,10 +27,13 @@ using rps_backend.Features.Feriados.Api;
 using rps_backend.Features.Feriados.Application;
 using rps_backend.Features.Honorarios.Api;
 using rps_backend.Features.Honorarios.Application;
+using rps_backend.Features.IntegracionTmr.Api;
+using rps_backend.Features.IntegracionTmr.Application;
 using rps_backend.Features.Liquidaciones.Api;
 using rps_backend.Features.Liquidaciones.Application;
 using rps_backend.Features.Proyectos.Api;
 using rps_backend.Features.Proyectos.Application;
+using rps_backend.Integrations.Tmr;
 using rps_backend.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -107,6 +110,14 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<FeriadosService>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AuthService>();
+// Sin Tmr:BaseUrl la app arranca igual: solo la sincronización responde que TMR no está disponible.
+builder.Services.AddHttpClient<ITmrGateway, TmrHttpGateway>(client =>
+{
+    if (Uri.TryCreate(builder.Configuration["Tmr:BaseUrl"], UriKind.Absolute, out var baseUrl))
+        client.BaseAddress = baseUrl;
+    client.DefaultRequestHeaders.Add("X-Api-Key", builder.Configuration["Tmr:ApiKey"]);
+});
+builder.Services.AddScoped<SincronizacionTmrService>();
 
 var app = builder.Build();
 
@@ -165,5 +176,6 @@ app.MapDocumentosMensualesEndpoints();
 app.MapDashboardEndpoints();
 app.MapExportacionesEndpoints();
 app.MapFeriadosEndpoints();
+app.MapIntegracionTmrEndpoints();
 
 app.Run();

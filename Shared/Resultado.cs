@@ -4,7 +4,8 @@ public enum TipoError
 {
     NoEncontrado,
     Validacion,
-    Conflicto
+    Conflicto,
+    ServicioNoDisponible
 }
 
 // Error genérico. Cada feature define sus errores concretos en su propio catálogo
@@ -20,6 +21,9 @@ public record Error(TipoError Tipo, string Codigo, string Mensaje, string? Campo
 
     public static Error Conflicto(string codigo, string mensaje) =>
         new(TipoError.Conflicto, codigo, mensaje);
+
+    public static Error ServicioNoDisponible(string codigo, string mensaje) =>
+        new(TipoError.ServicioNoDisponible, codigo, mensaje);
 }
 
 // Lo que devuelven los servicios de Application: un valor o un error, sin saber nada de HTTP.

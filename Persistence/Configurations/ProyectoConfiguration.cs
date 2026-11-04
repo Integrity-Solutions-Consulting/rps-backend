@@ -12,6 +12,12 @@ public class ProyectoConfiguration : IEntityTypeConfiguration<Proyecto>
 
         builder.HasKey(p => p.Id);
 
+        builder.Property(p => p.TmrProyectoId)
+            .HasMaxLength(50);
+
+        builder.HasIndex(p => p.TmrProyectoId)
+            .IsUnique();
+
         builder.Property(p => p.Nombre)
             .HasMaxLength(200)
             .IsRequired();

@@ -23,6 +23,18 @@ public class ColaboradorRpsConfiguration : IEntityTypeConfiguration<ColaboradorR
         builder.HasIndex(c => c.TmrColaboradorId)
             .IsUnique();
 
+        builder.Property(c => c.Nombres)
+            .HasMaxLength(200);
+
+        builder.Property(c => c.Apellidos)
+            .HasMaxLength(200);
+
+        builder.Property(c => c.Identificacion)
+            .HasMaxLength(50);
+
+        builder.Property(c => c.Correo)
+            .HasMaxLength(200);
+
         builder.Property(c => c.Clasificacion)
             .HasConversion<string>()
             .HasMaxLength(20);
