@@ -20,6 +20,13 @@ public static class ExportacionesEndpoints
             return TypedResults.File(contenido, "text/csv", nombreArchivo);
         });
 
+        // GET /api/exportaciones/liquidaciones/pdf?periodo=2026-11-01 (sin periodo: todos los meses).
+        group.MapGet("/liquidaciones/pdf", async (DateOnly? periodo, ExportacionesService service, CancellationToken ct) =>
+        {
+            var (contenido, nombreArchivo) = await service.ExportarLiquidacionesPdfAsync(periodo, ct);
+            return TypedResults.File(contenido, "application/pdf", nombreArchivo);
+        });
+
         group.MapGet("/colaboradores", async (ExportacionesService service, CancellationToken ct) =>
         {
             var (contenido, nombreArchivo) = await service.ExportarColaboradoresAsync(ct);

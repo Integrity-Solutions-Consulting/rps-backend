@@ -2,10 +2,11 @@ using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Persistence;
+using rps_backend.Shared;
 
 namespace rps_backend.Features.Exportaciones.Application;
 
-// Exportaciones CSV de solo lectura. No hay forma de fallar: sin Resultado<T>.
+// Exportaciones de solo lectura (CSV y el PDF de liquidaciones). No hay forma de fallar: sin Resultado<T>.
 // Todo número/fecha se formatea con InvariantCulture: el locale del servidor usa coma decimal,
 // y una coma rompería las columnas del CSV.
 public class ExportacionesService(RpsDbContext db)
@@ -63,6 +64,54 @@ public class ExportacionesService(RpsDbContext db)
         }));
 
         var nombreArchivo = periodo is null ? "liquidaciones_todas.csv" : $"liquidaciones_{periodo:yyyy-MM}.csv";
+        return (contenido, nombreArchivo);
+    }
+
+    // Mismo filtro que el CSV de liquidaciones, con nombres, cortes y totales para un PDF formal.
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesPdfAsync(DateOnly? periodo, CancellationToken ct)
+    {
+        var query = db.Liquidaciones.AsNoTracking().AsQueryable();
+        if (periodo is not null)
+            query = query.Where(l => l.Periodo == periodo);
+
+        var liquidaciones = await query
+            .Join(db.ColaboradoresRps.AsNoTracking(), l => l.ColaboradorId, c => c.Id, (l, c) => new
+            {
+                l.Id, l.Periodo, l.NetoConsolidado, l.Revisado,
+                c.TmrColaboradorId, c.Nombres, c.Apellidos, c.Identificacion, c.Clasificacion
+            })
+            .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId)
+            .ToListAsync(ct);
+
+        var ids = liquidaciones.Select(l => l.Id).ToList();
+        var cortes = (await db.Cortes.AsNoTracking()
+                .Where(c => ids.Contains(c.LiquidacionId))
+                .ToListAsync(ct))
+            .GroupBy(c => c.LiquidacionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var filas = liquidaciones.Select(l =>
+        {
+            var deLaLiquidacion = cortes.GetValueOrDefault(l.Id) ?? [];
+            var nombre = $"{l.Nombres} {l.Apellidos}".Trim();
+            return new FilaLiquidacionPdf(
+                string.IsNullOrEmpty(nombre) ? $"ID TMR {l.TmrColaboradorId}" : nombre,
+                l.Identificacion,
+                l.Clasificacion?.ToString(),
+                l.Periodo,
+                l.NetoConsolidado,
+                deLaLiquidacion.Where(c => c.Tipo == TipoCorte.Quincena).Sum(c => c.ValorPreparado),
+                deLaLiquidacion.Where(c => c.Tipo == TipoCorte.FinDeMes).Sum(c => c.ValorPreparado),
+                deLaLiquidacion.Sum(c => c.RecuperacionAdicional),
+                deLaLiquidacion.Count > 0 ? deLaLiquidacion.Sum(c => c.ValorPreparado) : l.NetoConsolidado,
+                l.Revisado);
+        }).ToList();
+
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var contenido = LiquidacionesPdf.Generar(new ReporteLiquidacionesPdf(
+            config.RazonSocial, config.Ruc, config.Moneda, periodo, DateTime.UtcNow, filas));
+
+        var nombreArchivo = periodo is null ? "liquidaciones_todas.pdf" : $"liquidaciones_{periodo:yyyy-MM}.pdf";
         return (contenido, nombreArchivo);
     }
 

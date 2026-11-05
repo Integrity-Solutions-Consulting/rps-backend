@@ -39,6 +39,10 @@ using rps_backend.Features.Proyectos.Application;
 using rps_backend.Integrations.Tmr;
 using rps_backend.Persistence;
 
+// QuestPDF (PDF de liquidaciones): licencia Community, gratuita para empresas con ingresos anuales
+// menores a 1 millón de USD. Si la empresa supera ese límite, cambiar a la licencia que corresponda.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
