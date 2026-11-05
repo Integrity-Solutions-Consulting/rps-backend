@@ -12,7 +12,7 @@ public record EnlaceEvento(string Texto, string Ruta, Dictionary<string, string>
 
 public record EventoHistorialResponse(
     DateTime Fecha,
-    // Vinculación | Frecuencia | Contrato | Adenda | Honorario | Liquidación | Anticipo | Documento | Exportación
+    // Vinculación | Frecuencia | Contrato | Adenda | Honorario | Liquidación | Anticipo | Documento
     string Tipo,
     string Descripcion,
     string Usuario,
@@ -71,13 +71,10 @@ public class HistorialService(RpsDbContext db)
                     Usuario, PeriodoTexto.Formato(a.FechaRegistro), null, "Registrada", enlace));
         }
 
-        // Honorarios (condiciones económicas), también los cancelados, y sus cancelaciones o restauraciones.
+        // Honorarios (condiciones económicas).
         var mesActual = new DateOnly(DateTime.Now.Year, DateTime.Now.Month, 1);
-        var condiciones = await db.CondicionesEconomicas.IgnoreQueryFilters().AsNoTracking()
+        var condiciones = await db.CondicionesEconomicas.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId).ToListAsync(ct);
-        var condicionIds = condiciones.Select(c => c.Id).ToList();
-        var movimientos = await db.CondicionesEconomicasMovimientos.AsNoTracking()
-            .Where(m => condicionIds.Contains(m.CondicionEconomicaId)).ToListAsync(ct);
         foreach (var c in condiciones)
         {
             var proyecto = proyectos.GetValueOrDefault(c.ProyectoId, "Proyecto");
@@ -85,12 +82,6 @@ public class HistorialService(RpsDbContext db)
             eventos.Add(new(c.CreadoEn, "Honorario", $"Cambio de honorario · {proyecto}: ${c.ImporteMensual:0.00} {modalidad} desde {PeriodoTexto.Formato(c.MesInicioVigencia)}.",
                 Usuario, PeriodoTexto.Formato(c.MesInicioVigencia), c.ImporteMensual,
                 c.MesInicioVigencia > mesActual ? "Programado" : "Registrado", Condiciones()));
-            foreach (var m in movimientos.Where(x => x.CondicionEconomicaId == c.Id))
-                eventos.Add(new(m.Fecha, "Honorario",
-                    m.Tipo == "Cancelado"
-                        ? $"Se canceló el cambio programado de {proyecto}: ${c.ImporteMensual:0.00} desde {PeriodoTexto.Formato(c.MesInicioVigencia)}."
-                        : $"Se deshizo la cancelación: {proyecto} vuelve a tener ${c.ImporteMensual:0.00} desde {PeriodoTexto.Formato(c.MesInicioVigencia)}.",
-                    m.Usuario, PeriodoTexto.Formato(c.MesInicioVigencia), c.ImporteMensual, m.Tipo, Condiciones()));
         }
 
         // Liquidaciones: cálculo y revisión (RN 49: revisar no es pagar).
@@ -128,20 +119,6 @@ public class HistorialService(RpsDbContext db)
             eventos.Add(new(d.MarcadoEn, "Documento", $"{(d.Tipo == TipoDocumento.Factura ? "Factura" : "Nota de venta")} {d.Numero} de {mes}.",
                 Usuario, mes, null, "Registrado",
                 new("Ver documento", "/documentos", new() { ["periodo"] = mes, ["colaborador"] = colaboradorId.ToString() })));
-        }
-
-        // Exportaciones en las que salió (RN 56: exportado no es pagado).
-        var exportaciones = await db.ExportacionesPagoDetalle.AsNoTracking()
-            .Where(d => d.ColaboradorId == colaboradorId)
-            .Join(db.ExportacionesPago.AsNoTracking(), d => d.ExportacionPagoId, e => e.Id, (d, e) => new { e.Periodo, e.Corte, e.Version, e.GeneradaEn, e.Usuario, d.Valor })
-            .ToListAsync(ct);
-        foreach (var e in exportaciones)
-        {
-            var mes = PeriodoTexto.Formato(e.Periodo);
-            var corte = e.Corte == TipoCorte.Quincena ? "quincena" : "fin de mes";
-            eventos.Add(new(e.GeneradaEn, "Exportación", $"Exportación {corte} de {mes} (versión {e.Version}). Archivo preparado; no confirma la transferencia.",
-                e.Usuario, mes, e.Valor, $"Exportado v{e.Version}",
-                new("Ver versión", "/exportaciones", new() { ["periodo"] = mes, ["corte"] = e.Corte.ToString() })));
         }
 
         return eventos.OrderByDescending(e => e.Fecha).ToList();

@@ -34,8 +34,6 @@ using rps_backend.Features.IntegracionTmr.Api;
 using rps_backend.Features.IntegracionTmr.Application;
 using rps_backend.Features.Liquidaciones.Api;
 using rps_backend.Features.Liquidaciones.Application;
-using rps_backend.Features.Notificaciones.Api;
-using rps_backend.Features.Notificaciones.Application;
 using rps_backend.Features.Proyectos.Api;
 using rps_backend.Features.Proyectos.Application;
 using rps_backend.Integrations.Tmr;
@@ -148,11 +146,7 @@ if (sincronizacionTmr.Habilitada)
     });
     builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
 }
-// Agregados para conectar el frontend: cancelar/restaurar honorarios, exportación por corte,
-// notificaciones e historial.
-builder.Services.AddScoped<CancelacionCondicionesService>();
-builder.Services.AddScoped<ExportacionesPagoService>();
-builder.Services.AddScoped<NotificacionesService>();
+// Historial del colaborador: solo lee lo que guardan los demás módulos.
 builder.Services.AddScoped<HistorialService>();
 
 var app = builder.Build();
@@ -214,9 +208,6 @@ app.MapVencimientosContratosEndpoints();
 app.MapExportacionesEndpoints();
 app.MapFeriadosEndpoints();
 app.MapIntegracionTmrEndpoints();
-app.MapCancelacionCondicionesEndpoints();
-app.MapExportacionesPagoEndpoints();
-app.MapNotificacionesEndpoints();
 app.MapHistorialEndpoints();
 
 app.Run();

@@ -6,7 +6,6 @@ using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Configuracion.Domain;
 using rps_backend.Features.Contratos.Domain;
 using rps_backend.Features.Documentos.Domain;
-using rps_backend.Features.Exportaciones.Domain;
 using rps_backend.Features.Feriados.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Liquidaciones.Domain;
@@ -30,7 +29,6 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Asignacion> Asignaciones => Set<Asignacion>();
     public DbSet<rps_backend.Features.IntegracionTmr.Domain.CambioTmr> CambiosTmr => Set<rps_backend.Features.IntegracionTmr.Domain.CambioTmr>();
     public DbSet<CondicionEconomica> CondicionesEconomicas => Set<CondicionEconomica>();
-    public DbSet<CondicionEconomicaMovimiento> CondicionesEconomicasMovimientos => Set<CondicionEconomicaMovimiento>();
     public DbSet<Honorario> Honorarios => Set<Honorario>();
     public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();
     public DbSet<rps_backend.Features.Liquidaciones.Domain.Corte> Cortes => Set<rps_backend.Features.Liquidaciones.Domain.Corte>();
@@ -45,8 +43,6 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Sesion> Sesiones => Set<Sesion>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<TokenBlacklist> TokenBlacklist => Set<TokenBlacklist>();
-    public DbSet<ExportacionPago> ExportacionesPago => Set<ExportacionPago>();
-    public DbSet<ExportacionPagoDetalle> ExportacionesPagoDetalle => Set<ExportacionPagoDetalle>();
     public DbSet<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey> DataProtectionKeys
         => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
 

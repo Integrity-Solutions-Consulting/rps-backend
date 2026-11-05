@@ -15,6 +15,12 @@ public static class AnticiposEndpoints
             .Produces<List<AnticipoAdicionalResponse>>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        // GET /api/colaboradores/{id}/anticipos/resumen?periodo=2026-11-01 (periodo opcional: mes en curso).
+        group.MapGet("/resumen", async (Guid id, DateOnly? periodo, AnticiposService service, CancellationToken ct) =>
+                (await service.ObtenerResumenAsync(id, periodo, ct)).AHttp(TypedResults.Ok))
+            .Produces<ResumenAnticiposResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         group.MapGet("/{anticipoId:guid}", async (Guid id, Guid anticipoId, AnticiposService service, CancellationToken ct) =>
                 (await service.ObtenerAsync(id, anticipoId, ct)).AHttp(TypedResults.Ok))
             .Produces<AnticipoAdicionalResponse>()

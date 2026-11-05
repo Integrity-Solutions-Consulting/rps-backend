@@ -37,6 +37,29 @@ public class AnticiposService(RpsDbContext db)
         return await AResponseAsync(anticipo, ct);
     }
 
+    // Datos para la pantalla de Anticipos. No agrega reglas: reutiliza los mismos cálculos que validan
+    // RegistrarAsync (neto completo, límite, saldo pendiente) y RegistrarPlanAsync (cortes por frecuencia).
+    public async Task<Resultado<ResumenAnticiposResponse>> ObtenerResumenAsync(Guid colaboradorId, DateOnly? periodo, CancellationToken ct)
+    {
+        var colaborador = await db.ColaboradoresRps.AsNoTracking().FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
+        if (colaborador is null)
+            return AnticipoErrores.ColaboradorNoEncontrado(colaboradorId);
+
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var netoMensualCompleto = await NetoMensualCompletoAsync(colaborador, config, ct);
+        var limite = Math.Round(netoMensualCompleto * config.PorcentajeMaximoAnticipo / 100, 2, MidpointRounding.AwayFromZero);
+        var saldoPendiente = await SaldoPendienteColaboradorAsync(colaboradorId, ct);
+
+        var mes = periodo is { Day: 1 } p ? p : new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var cortes = await FrecuenciaParaPlanAsync(colaboradorId, mes, ct) == Frecuencia.DosPagos
+            ? new List<TipoCorte> { TipoCorte.Quincena, TipoCorte.FinDeMes }
+            : new List<TipoCorte> { TipoCorte.FinDeMes };
+
+        return new ResumenAnticiposResponse(
+            colaboradorId, colaborador.Activo, netoMensualCompleto, config.PorcentajeMaximoAnticipo,
+            limite, saldoPendiente, Math.Max(0m, limite - saldoPendiente), mes, cortes);
+    }
+
     // RN 21, 42-43: el límite es un % (configurable) del neto mensual completo SIN prorratear
     // (todas las condiciones económicas vigentes del colaborador, a tarifa completa).
     public async Task<Resultado<AnticipoAdicionalResponse>> RegistrarAsync(
@@ -105,11 +128,7 @@ public class AnticiposService(RpsDbContext db)
         // solo crea Corte.Quincena cuando la frecuencia es DosPagos): el plan quedaría registrado
         // pero el saldo pendiente nunca se recuperaría de verdad.
         var periodoCuotas = request.Cuotas[0].Periodo!.Value;
-        var frecuenciaVigente = await db.ColaboradoresFrecuencia.AsNoTracking()
-            .Where(f => f.ColaboradorId == colaboradorId && f.VigenteDesdeMes <= periodoCuotas)
-            .OrderByDescending(f => f.VigenteDesdeMes)
-            .Select(f => f.Frecuencia)
-            .FirstOrDefaultAsync(ct);
+        var frecuenciaVigente = await FrecuenciaParaPlanAsync(colaboradorId, periodoCuotas, ct);
 
         if (frecuenciaVigente != Frecuencia.DosPagos && request.Cuotas.Any(c => c.Corte != TipoCorte.FinDeMes))
             return AnticipoErrores.CorteIncompatibleConFrecuencia;
@@ -149,6 +168,15 @@ public class AnticiposService(RpsDbContext db)
 
         return true;
     }
+
+    // Frecuencia con la que se valida un plan de ese mes. Misma consulta que antes estaba dentro de
+    // RegistrarPlanAsync; se separó para que el resumen use exactamente la misma regla.
+    private Task<Frecuencia> FrecuenciaParaPlanAsync(Guid colaboradorId, DateOnly periodo, CancellationToken ct) =>
+        db.ColaboradoresFrecuencia.AsNoTracking()
+            .Where(f => f.ColaboradorId == colaboradorId && f.VigenteDesdeMes <= periodo)
+            .OrderByDescending(f => f.VigenteDesdeMes)
+            .Select(f => f.Frecuencia)
+            .FirstOrDefaultAsync(ct);
 
     private async Task<decimal> SaldoPendienteColaboradorAsync(Guid colaboradorId, CancellationToken ct)
     {
