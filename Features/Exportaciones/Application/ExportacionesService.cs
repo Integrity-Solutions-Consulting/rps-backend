@@ -6,7 +6,7 @@ using rps_backend.Shared;
 
 namespace rps_backend.Features.Exportaciones.Application;
 
-// Exportaciones de solo lectura (CSV y el PDF de liquidaciones). No hay forma de fallar: sin Resultado<T>.
+// Exportaciones de solo lectura (CSV y PDF de liquidaciones, honorarios y colaboradores). No hay forma de fallar: sin Resultado<T>.
 // Todo número/fecha se formatea con InvariantCulture: el locale del servidor usa coma decimal,
 // y una coma rompería las columnas del CSV.
 public class ExportacionesService(RpsDbContext db)
@@ -39,6 +39,65 @@ public class ExportacionesService(RpsDbContext db)
         }));
 
         var nombreArchivo = periodo is null ? "honorarios_todos.csv" : $"honorarios_{periodo:yyyy-MM}.csv";
+        return (contenido, nombreArchivo);
+    }
+
+    // PDF de honorarios: mismo filtro que el CSV, con nombres de colaborador y proyecto y totales.
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosPdfAsync(DateOnly? periodo, CancellationToken ct)
+    {
+        var query = db.Honorarios.AsNoTracking().AsQueryable();
+        if (periodo is not null)
+            query = query.Where(h => h.Periodo == periodo);
+
+        var filas = await query
+            .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new { h, c })
+            .Join(db.Proyectos.AsNoTracking(), x => x.h.ProyectoId, p => p.Id, (x, p) => new
+            {
+                x.h.Periodo, x.h.DiasReales, x.h.DiasReconocidos, x.h.Modalidad,
+                x.h.Subtotal, x.h.Iva, x.h.RetencionFuente, x.h.RetencionIva, x.h.Neto,
+                x.c.TmrColaboradorId, x.c.Nombres, x.c.Apellidos, Proyecto = p.Nombre
+            })
+            .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId).ThenBy(f => f.Proyecto)
+            .ToListAsync(ct);
+
+        var todos = periodo is null;
+        var columnas = new List<ColumnaPdf> { new("Colaborador", 3), new("Proyecto", 2.6f) };
+        if (todos) columnas.Add(new("Período", 1.6f));
+        columnas.AddRange([
+            new("Días", 1), new("Modalidad", 1.2f), new("Subtotal", 1.4f, true), new("IVA", 1.2f, true),
+            new("Ret. fuente", 1.3f, true), new("Ret. IVA", 1.3f, true), new("Neto", 1.4f, true)
+        ]);
+
+        var filasPdf = filas.Select(f =>
+        {
+            var celdas = new List<string> { NombreColaborador(f.Nombres, f.Apellidos, f.TmrColaboradorId), f.Proyecto };
+            if (todos) celdas.Add(ReportesPdf.NombreMes(f.Periodo));
+            celdas.AddRange([
+                $"{f.DiasReconocidos}/{f.DiasReales}", f.Modalidad == Modalidad.MasIva ? "Más IVA" : "Neto",
+                ReportesPdf.Monto(f.Subtotal), ReportesPdf.Monto(f.Iva), ReportesPdf.Monto(f.RetencionFuente),
+                ReportesPdf.Monto(f.RetencionIva), ReportesPdf.Monto(f.Neto)
+            ]);
+            return celdas.ToArray();
+        }).ToList();
+
+        var totales = new List<string?> { $"Totales ({filas.Count} honorarios)", null };
+        if (todos) totales.Add(null);
+        totales.AddRange([
+            null, null, ReportesPdf.Monto(filas.Sum(f => f.Subtotal)), ReportesPdf.Monto(filas.Sum(f => f.Iva)),
+            ReportesPdf.Monto(filas.Sum(f => f.RetencionFuente)), ReportesPdf.Monto(filas.Sum(f => f.RetencionIva)),
+            ReportesPdf.Monto(filas.Sum(f => f.Neto))
+        ]);
+
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var personas = filas.Select(f => f.TmrColaboradorId).Distinct().Count();
+        var contenido = ReportesPdf.Generar(new ReporteTablaPdf(
+            config.RazonSocial, config.Ruc, "Honorarios por proyecto",
+            periodo is { } mes ? ReportesPdf.NombreMes(mes) : "Todos los períodos",
+            $"{personas} colaboradores · {filas.Count} honorarios · Moneda {config.Moneda}",
+            DateTime.UtcNow, columnas, filasPdf, totales.ToArray(),
+            "No hay honorarios calculados para este período."));
+
+        var nombreArchivo = periodo is null ? "honorarios_todos.pdf" : $"honorarios_{periodo:yyyy-MM}.pdf";
         return (contenido, nombreArchivo);
     }
 
@@ -129,6 +188,60 @@ public class ExportacionesService(RpsDbContext db)
         }));
 
         return (contenido, "colaboradores.csv");
+    }
+
+    // PDF de colaboradores: lista de RPS con nombre, identificación, clasificación, frecuencia vigente y estado.
+    // No incluye cuentas bancarias (están cifradas y no deben circular en un PDF).
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresPdfAsync(CancellationToken ct)
+    {
+        var colaboradores = await db.ColaboradoresRps.AsNoTracking()
+            .OrderBy(c => c.Apellidos).ThenBy(c => c.TmrColaboradorId)
+            .ToListAsync(ct);
+
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
+        var frecuencias = (await db.ColaboradoresFrecuencia.AsNoTracking()
+                .Where(f => f.VigenteDesdeMes <= mesActual)
+                .ToListAsync(ct))
+            .GroupBy(f => f.ColaboradorId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.VigenteDesdeMes).First().Frecuencia);
+
+        var columnas = new List<ColumnaPdf>
+        {
+            new("Colaborador", 3), new("Identificación", 1.6f), new("Correo", 3), new("ID TMR", 1),
+            new("Clasificación", 1.3f), new("Frecuencia", 1.5f), new("Configuración", 1.4f), new("Estado", 1.2f)
+        };
+
+        var filasPdf = colaboradores.Select(c => new[]
+        {
+            NombreColaborador(c.Nombres, c.Apellidos, c.TmrColaboradorId),
+            c.Identificacion ?? "—",
+            c.Correo ?? "—",
+            c.TmrColaboradorId,
+            c.Clasificacion?.ToString() ?? "Sin clasificar",
+            frecuencias.TryGetValue(c.Id, out var frec) ? (frec == Frecuencia.DosPagos ? "Quincena y fin de mes" : "Fin de mes") : "—",
+            c.EstadoConfiguracion == EstadoConfiguracion.Configurado ? "Configurado" : "Pendiente",
+            c.Activo ? "Activo" : "Desactivado"
+        }).ToList();
+
+        var activos = colaboradores.Count(c => c.Activo);
+        var configurados = colaboradores.Count(c => c.EstadoConfiguracion == EstadoConfiguracion.Configurado);
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var contenido = ReportesPdf.Generar(new ReporteTablaPdf(
+            config.RazonSocial, config.Ruc, "Colaboradores registrados",
+            $"Al {hoy:dd/MM/yyyy}",
+            $"{colaboradores.Count} en total · {activos} activos · {configurados} configurados",
+            DateTime.UtcNow, columnas, filasPdf,
+            [$"Total: {colaboradores.Count}", null, null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
+            "No hay colaboradores registrados."));
+
+        return (contenido, "colaboradores.pdf");
+    }
+
+    private static string NombreColaborador(string? nombres, string? apellidos, string tmrColaboradorId)
+    {
+        var nombre = $"{nombres} {apellidos}".Trim();
+        return string.IsNullOrEmpty(nombre) ? $"ID TMR {tmrColaboradorId}" : nombre;
     }
 
     private static string FormatMonto(decimal valor) => valor.ToString("F2", CultureInfo.InvariantCulture);
