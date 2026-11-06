@@ -155,6 +155,20 @@ builder.Services.AddScoped<HistorialService>();
 
 var app = builder.Build();
 
+// "dotnet rps-backend.dll --migrate": aplica las migraciones pendientes y termina. Sirve en el
+// contenedor desplegado, que no trae dotnet-ef; las migraciones siguen sin aplicarse al arrancar.
+if (args.Contains("--migrate"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<RpsDbContext>();
+    var pendientes = (await db.Database.GetPendingMigrationsAsync()).ToList();
+    await db.Database.MigrateAsync();
+    Console.WriteLine(pendientes.Count == 0
+        ? "Migraciones: la base ya estaba al día."
+        : $"Migraciones aplicadas: {string.Join(", ", pendientes)}.");
+    return;
+}
+
 // "dotnet run -- --initialize-data": siembra los roles y crea el primer usuario Administrador,
 // luego termina sin levantar el servidor web. Ver BootstrapService para el detalle.
 if (args.Contains("--initialize-data"))
