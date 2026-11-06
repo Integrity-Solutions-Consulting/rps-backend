@@ -1,0 +1,31 @@
+# STAGE 1: Build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Restaurar primero solo con el .csproj aprovecha el caché de capas de Docker
+COPY ["rps-backend.csproj", "./"]
+RUN dotnet restore "rps-backend.csproj"
+
+COPY . .
+RUN dotnet publish "rps-backend.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false
+
+# STAGE 2: Runtime
+# Imagen Debian (no Alpine): QuestPDF trae su librería nativa para glibc.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+
+# Npgsql busca la librería de GSS/Kerberos al conectar; sin ella deja un error en el log.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Usuario sin privilegios que ya trae la imagen oficial
+USER app
+
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+
+# Migraciones (manuales, una vez por despliegue con cambios): dotnet rps-backend.dll --migrate
+ENTRYPOINT ["dotnet", "rps-backend.dll"]
