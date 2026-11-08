@@ -9,10 +9,10 @@ public record CrearContratoRequest(
     List<Guid>? ProyectoIds, DateOnly? FechaInicio, DateOnly? FechaFin, string? Referencia, string? Observaciones,
     bool Indefinido = false);
 
-// Sin FechaFin ni Indefinido: esa decisión no se edita después de creada (RN 12). Para extender la
-// vigencia se usa una Adenda. El resto (proyectos, fecha de inicio, referencia, observaciones) sí
-// se puede corregir.
-public record EditarContratoRequest(List<Guid>? ProyectoIds, DateOnly? FechaInicio, string? Referencia, string? Observaciones);
+// Sin FechaFin: la fecha de fin original no se edita (RN 12). Para extenderla se usa una Adenda.
+// Sin ProyectoIds: la lista de proyectos de un contrato no se edita después de creado — para
+// cubrir un proyecto nuevo se registra otro contrato.
+public record EditarContratoRequest(string? Referencia, string? Observaciones);
 
 public record CrearAdendaRequest(DateOnly? NuevaFechaFin, string? Observaciones);
 

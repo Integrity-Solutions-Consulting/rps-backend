@@ -790,6 +790,51 @@ namespace rps_backend.Migrations
                     b.ToTable("contrato_proyecto", "rps");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Documentos.Domain.DocumentoMensual", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateOnly>("FechaEmision")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_emision");
+
+                    b.Property<DateTime>("MarcadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("marcado_en");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("numero");
+
+                    b.Property<DateOnly>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_documento_mensual");
+
+                    b.HasIndex("ColaboradorId", "Periodo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_documento_mensual_colaborador_id_periodo");
+
+                    b.ToTable("documento_mensual", "rps");
+                });
+
             modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.Exportacion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1513,6 +1558,16 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_contrato_proyecto_proyectos_proyecto_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Documentos.Domain.DocumentoMensual", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_documento_mensual_colaborador_rps_colaborador_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.ExportacionItem", b =>

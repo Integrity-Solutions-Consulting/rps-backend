@@ -52,9 +52,6 @@ public static class ContratoErrores
         Error.Validacion("Contrato.FechaFinInvalida", "fechaFin",
             "Es obligatoria y debe ser igual o posterior a la fecha de inicio, salvo que el contrato sea indefinido.");
 
-    public static readonly Error FechaInicioPosteriorAFin =
-        Error.Validacion("Contrato.FechaInicioPosteriorAFin", "fechaInicio", "No puede ser posterior a la fecha de fin del contrato.");
-
     public static readonly Error ReferenciaInvalida =
         Error.Validacion("Contrato.ReferenciaInvalida", "referencia", "Debe tener máximo 100 caracteres.");
 

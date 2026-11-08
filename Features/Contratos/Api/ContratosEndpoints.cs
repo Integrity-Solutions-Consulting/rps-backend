@@ -53,14 +53,6 @@ public static class ContratosEndpoints
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        // Corrige una adenda ya registrada (ej. se escribió mal la fecha).
-        group.MapPut("/{contratoId:guid}/adendas/{adendaId:guid}",
-                async (Guid id, Guid contratoId, Guid adendaId, CrearAdendaRequest request, ContratosService service, CancellationToken ct) =>
-                    (await service.EditarAdendaAsync(id, contratoId, adendaId, request, ct)).AHttp(TypedResults.Ok))
-            .Produces<AdendaResponse>()
-            .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status404NotFound);
-
         return app;
     }
 }

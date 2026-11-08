@@ -12,7 +12,7 @@ public record EnlaceEvento(string Texto, string Ruta, Dictionary<string, string>
 
 public record EventoHistorialResponse(
     DateTime Fecha,
-    // Vinculación | Frecuencia | Contrato | Adenda | Honorario | Liquidación | Anticipo
+    // Vinculación | Frecuencia | Contrato | Adenda | Honorario | Liquidación | Anticipo | Documento
     string Tipo,
     string Descripcion,
     // Null cuando el módulo de origen todavía no captura quién hizo el cambio (RC 03 parcial:
@@ -125,6 +125,16 @@ public class HistorialService(RpsDbContext db)
             eventos.Add(new(a.CreadoEn, "Anticipo", $"Anticipo adicional de ${a.Monto:0.00}. {detalle}",
                 nombresPorUsuarioId.GetValueOrDefault(a.CreadoPor), plan.Count > 0 ? PeriodoTexto.Formato(plan[0].Periodo) : PeriodoTexto.Formato(a.Fecha),
                 a.Monto, "Registrado", new("Ver plan", "/anticipos", new() { ["colaborador"] = colaboradorId.ToString() })));
+        }
+
+        // Documentos tributarios.
+        var documentos = await db.DocumentosMensuales.AsNoTracking().Where(d => d.ColaboradorId == colaboradorId).ToListAsync(ct);
+        foreach (var d in documentos)
+        {
+            var mes = PeriodoTexto.Formato(d.Periodo);
+            eventos.Add(new(d.MarcadoEn, "Documento", $"{(d.Tipo == TipoDocumento.Factura ? "Factura" : "Nota de venta")} {d.Numero} de {mes}.",
+                null, mes, null, "Registrado",
+                new("Ver documento", "/documentos", new() { ["periodo"] = mes, ["colaborador"] = colaboradorId.ToString() })));
         }
 
         return eventos.OrderByDescending(e => e.Fecha).ToList();

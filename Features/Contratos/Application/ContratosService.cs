@@ -119,13 +119,6 @@ public class ContratosService(RpsDbContext db)
         if (observaciones?.Length > 500)
             return ContratoErrores.ObservacionesInvalidas;
 
-        if (request.FechaInicio is null)
-            return ContratoErrores.FechaInicioInvalida;
-
-        var proyectoIds = (request.ProyectoIds ?? []).Distinct().ToList();
-        if (proyectoIds.Count != (request.ProyectoIds?.Count ?? 0))
-            return ContratoErrores.ProyectosDuplicados;
-
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
         if (colaborador is null)
             return ContratoErrores.ColaboradorNoEncontrado(colaboradorId);
@@ -137,49 +130,13 @@ public class ContratosService(RpsDbContext db)
         if (contrato is null)
             return ContratoErrores.NoEncontrado(contratoId);
 
-        // FechaFin (y si es indefinido) no se tocan aquí a propósito (RN 12): esa decisión no se
-        // edita ni se reemplaza. Para extender la vigencia del contrato se usa RegistrarAdendaAsync.
-        if (contrato.FechaFin is not null && request.FechaInicio > contrato.FechaFin)
-            return ContratoErrores.FechaInicioPosteriorAFin;
-
-        List<Proyectos.Domain.Proyecto> proyectos = [];
-        if (proyectoIds.Count > 0)
-        {
-            proyectos = await db.Proyectos.Where(p => proyectoIds.Contains(p.Id)).ToListAsync(ct);
-
-            var faltante = proyectoIds.FirstOrDefault(id => !proyectos.Any(p => p.Id == id));
-            if (faltante != default)
-                return ContratoErrores.ProyectoNoEncontrado(faltante);
-
-            var inactivo = proyectos.FirstOrDefault(p => !p.Activo);
-            if (inactivo is not null)
-                return ContratoErrores.ProyectoInactivo;
-
-            var superpuesto = await ProyectoSuperpuestoAsync(
-                colaboradorId, proyectoIds, request.FechaInicio.Value, contrato.FechaFin, ct, excluirContratoId: contratoId);
-            if (superpuesto is not null)
-                return ContratoErrores.Superpuesto(superpuesto.Value);
-        }
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        var actuales = await db.ContratosProyectos.Where(cp => cp.ContratoId == contratoId).ToListAsync(ct);
-        var aQuitar = actuales.Where(cp => !proyectoIds.Contains(cp.ProyectoId)).ToList();
-        var aAgregar = proyectoIds.Where(id => !actuales.Any(cp => cp.ProyectoId == id))
-            .Select(id => new ContratoProyecto { ContratoId = contratoId, ProyectoId = id });
-        db.ContratosProyectos.RemoveRange(aQuitar);
-        db.ContratosProyectos.AddRange(aAgregar);
-
-        contrato.FechaInicio = request.FechaInicio.Value;
+        // FechaFin no se toca aquí a propósito (RN 12): la fecha original no se edita ni se
+        // reemplaza. Para extender la vigencia del contrato se usa RegistrarAdendaAsync. La lista
+        // de proyectos tampoco se edita: para cubrir uno nuevo se registra otro contrato.
         contrato.Referencia = string.IsNullOrEmpty(referencia) ? null : referencia;
         contrato.Observaciones = string.IsNullOrEmpty(observaciones) ? null : observaciones;
         contrato.ActualizadoEn = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
-
-        await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
-        await db.SaveChangesAsync(ct);
-
-        await tx.CommitAsync(ct);
 
         return (await ARespuestasAsync([contrato], ct))[0];
     }
@@ -276,57 +233,12 @@ public class ContratosService(RpsDbContext db)
         return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones);
     }
 
-    // Permite corregir una adenda ya registrada (ej. se escribió mal la fecha): la nueva fecha debe
-    // seguir siendo posterior a la que quedaría vigente sin contar esta misma adenda.
-    public async Task<Resultado<AdendaResponse>> EditarAdendaAsync(
-        Guid colaboradorId, Guid contratoId, Guid adendaId, CrearAdendaRequest request, CancellationToken ct)
-    {
-        var observaciones = request.Observaciones?.Trim();
-        if (observaciones?.Length > 500)
-            return ContratoErrores.ObservacionesInvalidas;
-
-        var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
-        if (colaborador is null)
-            return ContratoErrores.ColaboradorNoEncontrado(colaboradorId);
-
-        var contrato = await db.Contratos.FirstOrDefaultAsync(c => c.Id == contratoId && c.ColaboradorId == colaboradorId, ct);
-        if (contrato is null)
-            return ContratoErrores.NoEncontrado(contratoId);
-
-        if (contrato.FechaFin is null)
-            return ContratoErrores.ContratoIndefinido;
-
-        var adenda = await db.Adendas.FirstOrDefaultAsync(a => a.Id == adendaId && a.ContratoId == contratoId, ct);
-        if (adenda is null)
-            return ContratoErrores.AdendaNoEncontrada(adendaId);
-
-        var fechaFinVigenteSinEsta = await FechaFinVigenteAsync(contrato, ct, excluirAdendaId: adendaId);
-
-        if (request.NuevaFechaFin is null || request.NuevaFechaFin <= fechaFinVigenteSinEsta)
-            return ContratoErrores.NuevaFechaFinInvalida;
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        adenda.NuevaFechaFin = request.NuevaFechaFin.Value;
-        adenda.Observaciones = string.IsNullOrEmpty(observaciones) ? null : observaciones;
-        await db.SaveChangesAsync(ct);
-
-        // Puede revivir o cerrar la vigencia del contrato según hacia dónde se movió la fecha.
-        await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
-        await db.SaveChangesAsync(ct);
-
-        await tx.CommitAsync(ct);
-
-        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones);
-    }
-
-    // Solo se llama con contratos que no son indefinidos (se valida antes en Registrar/EditarAdendaAsync).
-    // excluirAdendaId: al editar una adenda, no se compara contra sí misma.
-    private async Task<DateOnly> FechaFinVigenteAsync(Contrato contrato, CancellationToken ct, Guid? excluirAdendaId = null)
+    // Solo se llama con contratos que no son indefinidos (se valida antes en RegistrarAdendaAsync).
+    private async Task<DateOnly> FechaFinVigenteAsync(Contrato contrato, CancellationToken ct)
     {
         var fechaFin = contrato.FechaFin!.Value;
         var maxAdenda = await db.Adendas.AsNoTracking()
-            .Where(a => a.ContratoId == contrato.Id && a.Id != excluirAdendaId)
+            .Where(a => a.ContratoId == contrato.Id)
             .Select(a => a.NuevaFechaFin)
             .OrderByDescending(f => f)
             .FirstOrDefaultAsync(ct);
@@ -336,14 +248,12 @@ public class ContratosService(RpsDbContext db)
 
     // Busca, entre los proyectos pedidos, alguno que ya esté cubierto por otro contrato vigente
     // de este colaborador en un rango que se superpone con [fechaInicio, fechaFin]. fechaFin null
-    // (indefinido) se trata como "sin límite": siempre se superpone hacia adelante. excluirContratoId
-    // se usa al editar: el contrato no se compara contra sí mismo.
+    // (indefinido) se trata como "sin límite": siempre se superpone hacia adelante.
     private async Task<Guid?> ProyectoSuperpuestoAsync(
-        Guid colaboradorId, List<Guid> proyectoIds, DateOnly fechaInicio, DateOnly? fechaFin, CancellationToken ct,
-        Guid? excluirContratoId = null)
+        Guid colaboradorId, List<Guid> proyectoIds, DateOnly fechaInicio, DateOnly? fechaFin, CancellationToken ct)
     {
         var candidatos = await db.ContratosProyectos.AsNoTracking()
-            .Where(cp => proyectoIds.Contains(cp.ProyectoId) && cp.ContratoId != excluirContratoId)
+            .Where(cp => proyectoIds.Contains(cp.ProyectoId))
             .Join(db.Contratos.AsNoTracking().Where(c => c.ColaboradorId == colaboradorId), cp => cp.ContratoId, c => c.Id,
                 (cp, c) => new { cp.ProyectoId, Contrato = c })
             .ToListAsync(ct);
