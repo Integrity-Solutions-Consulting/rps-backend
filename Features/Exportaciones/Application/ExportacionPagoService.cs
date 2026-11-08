@@ -141,12 +141,6 @@ public class ExportacionPagoService(RpsDbContext db, CuentaBancariaProtector pro
             .Where(cb => colaboradorIds.Contains(cb.ColaboradorId) && cb.Activa)
             .ToDictionaryAsync(cb => cb.ColaboradorId, ct);
 
-        var conDocumento = (await db.DocumentosMensuales.AsNoTracking()
-                .Where(d => d.Periodo == periodo && colaboradorIds.Contains(d.ColaboradorId))
-                .Select(d => d.ColaboradorId)
-                .ToListAsync(ct))
-            .ToHashSet();
-
         // Versiones anteriores de este mismo (Periodo, Corte) que ya incluyeron a cada colaborador (RN 55:
         // "identificar registros previamente exportados y advertir sobre su repetición").
         var versionesPorColaborador = (await db.Exportaciones.AsNoTracking()
@@ -166,8 +160,6 @@ public class ExportacionPagoService(RpsDbContext db, CuentaBancariaProtector pro
             var advertencias = new List<string>();
             if (cuenta is null)
                 advertencias.Add("Sin datos bancarios registrados.");
-            if (!conDocumento.Contains(f.co.Id))
-                advertencias.Add("Sin documento mensual registrado para este período.");
             if (f.c.RecuperacionNoAplicada > 0)
                 advertencias.Add($"El corte no alcanzó para descontar {f.c.RecuperacionNoAplicada:0.00} de la cuota de anticipo programada.");
             if (f.c.AjustePorProrrateo > 0)
