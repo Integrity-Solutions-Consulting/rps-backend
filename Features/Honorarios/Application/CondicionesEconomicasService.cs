@@ -47,8 +47,10 @@ public class CondicionesEconomicasService(RpsDbContext db)
         if (!await db.Proyectos.AnyAsync(p => p.Id == request.ProyectoId, ct))
             return CondicionEconomicaErrores.ProyectoNoEncontrado(request.ProyectoId.Value);
 
-        var contratoValido = await db.Contratos.AnyAsync(c =>
-            c.Id == request.ContratoId && c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId, ct);
+        // Un contrato puede cubrir varios proyectos: el honorario solo se puede registrar para uno
+        // que ese contrato efectivamente incluya.
+        var contratoValido = await db.Contratos.AnyAsync(c => c.Id == request.ContratoId && c.ColaboradorId == colaboradorId, ct)
+            && await db.ContratosProyectos.AnyAsync(cp => cp.ContratoId == request.ContratoId && cp.ProyectoId == request.ProyectoId, ct);
         if (!contratoValido)
             return CondicionEconomicaErrores.ContratoNoEncontrado(request.ContratoId.Value);
 

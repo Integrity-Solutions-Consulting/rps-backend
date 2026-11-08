@@ -19,11 +19,7 @@ public static class ColaboradoresEndpoints
             .Produces<ColaboradorDetalleResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        group.MapPost("/", async (CrearColaboradorRequest request, ColaboradoresService service, CancellationToken ct) =>
-                (await service.CrearAsync(request, ct)).AHttp(c => TypedResults.Created($"/api/colaboradores/{c.Id}", c)))
-            .Produces<ColaboradorDetalleResponse>(StatusCodes.Status201Created)
-            .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status409Conflict);
+        // Sin POST de alta a propósito (RN 03): un colaborador solo entra a RPS vía sincronización con TMR.
 
         group.MapPut("/{id:guid}/clasificacion", async (Guid id, ActualizarClasificacionRequest request, ColaboradoresService service, CancellationToken ct) =>
                 (await service.ActualizarClasificacionAsync(id, request, ct)).AHttp(TypedResults.Ok))

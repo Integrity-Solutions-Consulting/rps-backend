@@ -10,6 +10,8 @@ using Microsoft.IdentityModel.Tokens;
 using Quartz;
 using rps_backend.Features.Anticipos.Api;
 using rps_backend.Features.Anticipos.Application;
+using rps_backend.Features.Auditoria.Api;
+using rps_backend.Features.Auditoria.Application;
 using rps_backend.Features.Auth.Api;
 using rps_backend.Features.Auth.Application;
 using rps_backend.Features.Colaboradores.Api;
@@ -48,9 +50,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddDbContext<RpsDbContext>(options =>
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<AuditoriaInterceptor>();
+builder.Services.AddDbContext<RpsDbContext>((sp, options) =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-    .UseSnakeCaseNamingConvention());
+    .UseSnakeCaseNamingConvention()
+    .AddInterceptors(sp.GetRequiredService<AuditoriaInterceptor>()));
 
 // ── Autenticación JWT ──
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
@@ -114,6 +119,8 @@ builder.Services.AddScoped<DocumentosMensualesService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<VencimientosContratosService>();
 builder.Services.AddScoped<ExportacionesService>();
+builder.Services.AddScoped<ExportacionPagoService>();
+builder.Services.AddScoped<AuditoriaService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<FeriadosService>();
 builder.Services.AddSingleton<TokenService>();
@@ -185,6 +192,29 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// La más externa: convierte un DbUpdateConcurrencyException (RC 04 — alguien más guardó este
+// mismo registro primero) en 409, en vez de un 500 sin explicación.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc9110#section-15.5.10",
+            title = "Conflicto",
+            status = 409,
+            detail = "El registro fue modificado por otra persona mientras se guardaba. Vuelve a cargarlo e intenta de nuevo.",
+            codigo = "Concurrencia.Conflicto"
+        });
+    }
+});
+
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 
@@ -210,6 +240,10 @@ app.Use(async (context, next) =>
 
 app.UseAuthorization();
 
+// Después de autenticar/autorizar: solo las peticiones que ya pasaron esos filtros pueden
+// quedar guardadas como respuesta "repetible" (RC 04 — doble clic / reintento de red).
+app.UseMiddleware<IdempotenciaMiddleware>();
+
 app.MapAuthEndpoints();
 app.MapColaboradoresEndpoints();
 app.MapContratosEndpoints();
@@ -224,8 +258,10 @@ app.MapDocumentosMensualesEndpoints();
 app.MapDashboardEndpoints();
 app.MapVencimientosContratosEndpoints();
 app.MapExportacionesEndpoints();
+app.MapExportacionPagoEndpoints();
 app.MapFeriadosEndpoints();
 app.MapIntegracionTmrEndpoints();
 app.MapHistorialEndpoints();
+app.MapAuditoriaEndpoints();
 
 app.Run();

@@ -21,6 +21,13 @@ public class LiquidacionConfiguration : IEntityTypeConfiguration<Liquidacion>
             .HasForeignKey(l => l.ColaboradorId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(l => new { l.ColaboradorId, l.Periodo });
+        // Una sola Liquidacion por colaborador y período (RN 30): sin esto, dos corridas de
+        // GenerarAsync para el mismo mes podían crear una segunda liquidación y recuperar la
+        // misma cuota de anticipo dos veces.
+        builder.HasIndex(l => new { l.ColaboradorId, l.Periodo }).IsUnique();
+
+        // Token de concurrencia nativo de PostgreSQL (RC 04): dos "Calcular"/"Revisar" simultáneos
+        // sobre la misma liquidación ya no se pisan en silencio — el segundo guardado falla con 409.
+        builder.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsRowVersion();
     }
 }

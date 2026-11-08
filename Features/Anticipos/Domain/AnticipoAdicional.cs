@@ -15,5 +15,8 @@ public class AnticipoAdicional
 
     public string? Observaciones { get; set; }
 
+    // Quién lo registró (RC 03).
+    public Guid CreadoPor { get; set; }
+
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 }

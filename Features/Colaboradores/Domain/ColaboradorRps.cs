@@ -8,7 +8,7 @@ public class ColaboradorRps
 
     public string TmrColaboradorId { get; set; } = string.Empty;
 
-    // Copia de TMR, actualizada por la sincronización. Nulos si el registro se creó a mano.
+    // Copia de TMR, actualizada por la sincronización. Nulos solo antes de la primera sincronización.
     public string? Nombres { get; set; }
 
     public string? Apellidos { get; set; }

@@ -4,7 +4,8 @@ namespace rps_backend.Features.Colaboradores.Application;
 
 // ===== Requests =====
 
-public record CrearColaboradorRequest(string? TmrColaboradorId, Clasificacion? Clasificacion);
+// Sin CrearColaboradorRequest a propósito (RN 03): RPS no da de alta colaboradores, solo los
+// recibe de TMR vía SincronizacionTmrService.
 
 public record ActualizarClasificacionRequest(Clasificacion? Clasificacion);
 
@@ -15,7 +16,7 @@ public record RegistrarCuentaBancariaRequest(string? Banco, string? TipoCuenta, 
 // ===== Responses =====
 
 // Nombres, Apellidos, Identificacion, Correo, ActivoEnTmr, SincronizadoEn y EliminadoEnOrigen son información
-// de origen TMR (solo lectura en RPS); nulos si el registro se creó a mano.
+// de origen TMR (solo lectura en RPS). Nulos solo si todavía no corrió la primera sincronización.
 public record ColaboradorResumenResponse(
     Guid Id,
     string TmrColaboradorId,

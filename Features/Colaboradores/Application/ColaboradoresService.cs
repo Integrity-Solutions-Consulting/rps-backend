@@ -48,37 +48,8 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         return await ConstruirDetalleAsync(colaborador, ct);
     }
 
-    public async Task<Resultado<ColaboradorDetalleResponse>> CrearAsync(CrearColaboradorRequest request, CancellationToken ct)
-    {
-        var tmrColaboradorId = request.TmrColaboradorId?.Trim();
-        if (string.IsNullOrEmpty(tmrColaboradorId) || tmrColaboradorId.Length > 50)
-            return ColaboradorErrores.TmrIdInvalido;
-
-        if (await db.ColaboradoresRps.AnyAsync(c => c.TmrColaboradorId == tmrColaboradorId, ct))
-            return ColaboradorErrores.TmrDuplicado(tmrColaboradorId);
-
-        // Un colaborador nuevo siempre empieza Pendiente: aún no tiene frecuencia ni cuenta.
-        var colaborador = new ColaboradorRps
-        {
-            TmrColaboradorId = tmrColaboradorId,
-            Clasificacion = request.Clasificacion
-        };
-
-        db.ColaboradoresRps.Add(colaborador);
-
-        try
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException)
-        {
-            // Dos altas concurrentes con el mismo TmrColaboradorId pueden pasar el AnyAsync de
-            // arriba antes de que cualquiera guarde: el índice único de la base es la red final.
-            return ColaboradorErrores.TmrDuplicado(tmrColaboradorId);
-        }
-
-        return await ConstruirDetalleAsync(colaborador, ct);
-    }
+    // Sin alta manual a propósito (RN 03): un ColaboradorRps solo nace desde
+    // SincronizacionTmrService, cuando TMR confirma que la persona existe.
 
     public async Task<Resultado<ColaboradorDetalleResponse>> ActualizarClasificacionAsync(
         Guid id, ActualizarClasificacionRequest request, CancellationToken ct)

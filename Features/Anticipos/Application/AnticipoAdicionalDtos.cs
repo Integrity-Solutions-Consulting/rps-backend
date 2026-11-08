@@ -29,4 +29,4 @@ public record ResumenAnticiposResponse(
 
 public record AnticipoAdicionalResponse(
     Guid Id, Guid ColaboradorId, decimal Monto, DateOnly Fecha, string? Observaciones,
-    decimal SaldoPendiente, List<CuotaRecuperacionResponse> Cuotas, DateTime CreadoEn);
+    decimal SaldoPendiente, List<CuotaRecuperacionResponse> Cuotas, Guid CreadoPor, DateTime CreadoEn);

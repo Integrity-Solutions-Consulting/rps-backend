@@ -14,6 +14,12 @@ public class LiquidacionesService(RpsDbContext db)
     // Consolida los honorarios sin liquidar todavía de un período por colaborador (RN 30-31) y
     // distribuye el neto en 1 o 2 Corte según su Frecuencia (RN 36-40). Idempotente: un honorario
     // ya asignado a una liquidación (LiquidacionId != null) no se vuelve a tomar.
+    //
+    // Si el colaborador ya tiene Liquidacion de este período (ej. llegó un contrato tardío y se
+    // generaron honorarios nuevos después de la primera corrida), los honorarios nuevos se suman
+    // a esa misma Liquidacion y sus Corte se recalculan con el total — nunca se crea una segunda
+    // Liquidacion para el mismo (colaborador, período), porque eso volvía a aplicar la recuperación
+    // de anticipos de ese período una segunda vez.
     public async Task<Resultado<GenerarLiquidacionesResponse>> GenerarAsync(GenerarLiquidacionesRequest request, CancellationToken ct)
     {
         if (request.Periodo is not { Day: 1 } periodo)
@@ -22,14 +28,24 @@ public class LiquidacionesService(RpsDbContext db)
         var finPeriodo = periodo.AddMonths(1).AddDays(-1);
         var dia15 = new DateOnly(periodo.Year, periodo.Month, 15);
 
-        var honorarios = await db.Honorarios
+        var honorariosNuevos = await db.Honorarios
             .Where(h => h.Periodo == periodo && h.LiquidacionId == null)
             .ToListAsync(ct);
 
-        if (honorarios.Count == 0)
-            return new GenerarLiquidacionesResponse(0, 0);
+        if (honorariosNuevos.Count == 0)
+            return new GenerarLiquidacionesResponse(0, 0, 0);
 
-        var colaboradorIds = honorarios.Select(h => h.ColaboradorId).Distinct().ToList();
+        var colaboradorIds = honorariosNuevos.Select(h => h.ColaboradorId).Distinct().ToList();
+
+        var liquidacionesExistentes = await db.Liquidaciones
+            .Where(l => l.Periodo == periodo && colaboradorIds.Contains(l.ColaboradorId))
+            .ToDictionaryAsync(l => l.ColaboradorId, ct);
+
+        var honorariosPrevios = liquidacionesExistentes.Count == 0
+            ? []
+            : await db.Honorarios.AsNoTracking()
+                .Where(h => h.Periodo == periodo && h.LiquidacionId != null && colaboradorIds.Contains(h.ColaboradorId))
+                .ToListAsync(ct);
 
         var frecuenciaPorColaborador = (await db.ColaboradoresFrecuencia.AsNoTracking()
                 .Where(f => colaboradorIds.Contains(f.ColaboradorId) && f.VigenteDesdeMes <= periodo)
@@ -42,7 +58,7 @@ public class LiquidacionesService(RpsDbContext db)
                 .ToListAsync(ct))
             .ToDictionary(c => c.Id);
 
-        var proyectoIds = honorarios.Select(h => h.ProyectoId).Distinct().ToList();
+        var proyectoIds = honorariosNuevos.Concat(honorariosPrevios).Select(h => h.ProyectoId).Distinct().ToList();
         var asignaciones = await db.Asignaciones.AsNoTracking()
             .Where(a => colaboradorIds.Contains(a.ColaboradorId) && proyectoIds.Contains(a.ProyectoId)
                 && !a.EliminadaEnOrigen
@@ -59,51 +75,106 @@ public class LiquidacionesService(RpsDbContext db)
             .GroupBy(x => (x.ColaboradorId, x.Corte))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Importe));
 
+        decimal NetoMensualCompletoDe(IEnumerable<Honorario> grupoHonorarios) => grupoHonorarios.Sum(h =>
+        {
+            var condicion = condicionesPorId[h.CondicionEconomicaId];
+            return CalculoTributario.Calcular(
+                condicion.ImporteMensual, h.Modalidad, h.PorcentajeIva, h.PorcentajeRetencionFuente, h.PorcentajeRetencionIva).Neto;
+        });
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         var generadas = 0;
-        foreach (var grupo in honorarios.GroupBy(h => h.ColaboradorId))
+        var actualizadas = 0;
+        foreach (var grupo in honorariosNuevos.GroupBy(h => h.ColaboradorId))
         {
-            var netoConsolidado = grupo.Sum(h => h.Neto);
+            var previosDelColaborador = honorariosPrevios.Where(h => h.ColaboradorId == grupo.Key).ToList();
+            var yaExistia = liquidacionesExistentes.TryGetValue(grupo.Key, out var liquidacion);
 
-            var netoMensualCompleto = grupo.Sum(h =>
+            var netoConsolidado = previosDelColaborador.Sum(h => h.Neto) + grupo.Sum(h => h.Neto);
+            var netoMensualCompleto = NetoMensualCompletoDe(previosDelColaborador) + NetoMensualCompletoDe(grupo);
+
+            if (!yaExistia)
             {
-                var condicion = condicionesPorId[h.CondicionEconomicaId];
-                return CalculoTributario.Calcular(
-                    condicion.ImporteMensual, h.Modalidad, h.PorcentajeIva, h.PorcentajeRetencionFuente, h.PorcentajeRetencionIva).Neto;
-            });
-
-            var liquidacion = new Liquidacion
+                liquidacion = new Liquidacion { ColaboradorId = grupo.Key, Periodo = periodo, NetoConsolidado = netoConsolidado };
+                db.Liquidaciones.Add(liquidacion);
+                generadas++;
+            }
+            else
             {
-                ColaboradorId = grupo.Key,
-                Periodo = periodo,
-                NetoConsolidado = netoConsolidado
-            };
-            db.Liquidaciones.Add(liquidacion);
-
-            foreach (var honorario in grupo)
-                honorario.LiquidacionId = liquidacion.Id;
-
-            var frecuencia = frecuenciaPorColaborador.GetValueOrDefault(grupo.Key, Frecuencia.FinDeMes);
-            var asignacionesColaborador = asignaciones
-                .Where(a => a.ColaboradorId == grupo.Key && grupo.Any(h => h.ProyectoId == a.ProyectoId))
-                .ToList();
-
-            foreach (var corte in ConstruirCortes(frecuencia, netoConsolidado, netoMensualCompleto, asignacionesColaborador, periodo, finPeriodo, dia15))
-            {
-                corte.LiquidacionId = liquidacion.Id;
-                corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((grupo.Key, corte.Tipo), 0m);
-                corte.ValorPreparado = Math.Max(corte.ValorBase - corte.RecuperacionAdicional, 0m);
-                db.Cortes.Add(corte);
+                liquidacion!.NetoConsolidado = netoConsolidado;
+                // Un honorario nuevo cambia el total: la revisión anterior ya no describe esta
+                // liquidación (equivalente de RN 49 para este caso).
+                liquidacion.Revisado = false;
+                liquidacion.RevisadoEn = null;
+                liquidacion.RevisadoPorUsuarioId = null;
+                actualizadas++;
             }
 
-            generadas++;
+            foreach (var honorario in grupo)
+                honorario.LiquidacionId = liquidacion!.Id;
+
+            var frecuencia = frecuenciaPorColaborador.GetValueOrDefault(grupo.Key, Frecuencia.FinDeMes);
+            var proyectosDelColaborador = previosDelColaborador.Select(h => h.ProyectoId).Concat(grupo.Select(h => h.ProyectoId)).ToHashSet();
+            var asignacionesColaborador = asignaciones
+                .Where(a => a.ColaboradorId == grupo.Key && proyectosDelColaborador.Contains(a.ProyectoId))
+                .ToList();
+
+            var cortesCalculados = ConstruirCortes(frecuencia, netoConsolidado, netoMensualCompleto, asignacionesColaborador, periodo, finPeriodo, dia15);
+
+            foreach (var corte in cortesCalculados)
+                corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((grupo.Key, corte.Tipo), 0m);
+
+            // RN 47 / "saldo insuficiente por salida": la recuperación nunca deja el corte
+            // negativo, pero lo que no cupo se registra en RecuperacionNoAplicada en vez de
+            // desaparecer silenciosamente.
+            static (decimal preparado, decimal noAplicada) AplicarRecuperacion(decimal valorBase, decimal recuperacion) =>
+                (Math.Max(valorBase - recuperacion, 0m), Math.Max(recuperacion - valorBase, 0m));
+
+            if (!yaExistia)
+            {
+                foreach (var corte in cortesCalculados)
+                {
+                    corte.LiquidacionId = liquidacion!.Id;
+                    (corte.ValorPreparado, corte.RecuperacionNoAplicada) = AplicarRecuperacion(corte.ValorBase, corte.RecuperacionAdicional);
+                    db.Cortes.Add(corte);
+                }
+            }
+            else
+            {
+                var cortesExistentes = await db.Cortes.Where(c => c.LiquidacionId == liquidacion!.Id).ToListAsync(ct);
+
+                foreach (var calculado in cortesCalculados)
+                {
+                    var existente = cortesExistentes.FirstOrDefault(c => c.Tipo == calculado.Tipo);
+                    if (existente is null)
+                    {
+                        calculado.LiquidacionId = liquidacion!.Id;
+                        (calculado.ValorPreparado, calculado.RecuperacionNoAplicada) = AplicarRecuperacion(calculado.ValorBase, calculado.RecuperacionAdicional);
+                        db.Cortes.Add(calculado);
+                    }
+                    else
+                    {
+                        // Se sobrescribe con el total recalculado; RecuperacionAdicional no se
+                        // suma a lo que ya tenía, para no aplicar la misma cuota dos veces.
+                        existente.ValorBase = calculado.ValorBase;
+                        existente.RecuperacionAdicional = calculado.RecuperacionAdicional;
+                        existente.AjustePorProrrateo = calculado.AjustePorProrrateo;
+                        (existente.ValorPreparado, existente.RecuperacionNoAplicada) = AplicarRecuperacion(existente.ValorBase, existente.RecuperacionAdicional);
+                    }
+                }
+
+                // Si la frecuencia o el momento de ingreso cambiaron el número de cortes (caso raro
+                // dentro del mismo período), se retira el corte que ya no corresponde.
+                foreach (var sobrante in cortesExistentes.Where(c => cortesCalculados.TrueForAll(n => n.Tipo != c.Tipo)))
+                    db.Cortes.Remove(sobrante);
+            }
         }
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        return new GenerarLiquidacionesResponse(generadas, honorarios.Count);
+        return new GenerarLiquidacionesResponse(generadas, actualizadas, honorariosNuevos.Count);
     }
 
     private static List<Corte> ConstruirCortes(
@@ -129,13 +200,21 @@ public class LiquidacionesService(RpsDbContext db)
         // total mensual reconocido (ya prorateado por días reales trabajados en todo el mes)
         // menos lo ya preparado en quincena — no una base propia de la segunda quincena.
         var finDeMes = netoConsolidado - quincena;
+        var ajustePorProrrateo = 0m;
         if (finDeMes < 0)
         {
+            // Salida en el período: lo reconocido en todo el mes no alcanza la mitad ordinaria.
+            // Se muestra cuánto se le restó a la quincena en vez de ocultarlo (ver "Saldo
+            // insuficiente por salida" del documento de requisitos).
+            ajustePorProrrateo = -finDeMes;
             quincena += finDeMes; // absorbe el faltante; finDeMes vuelve a 0.
             finDeMes = 0;
         }
 
-        return [NuevoCorte(TipoCorte.Quincena, quincena), NuevoCorte(TipoCorte.FinDeMes, finDeMes)];
+        var corteQuincena = NuevoCorte(TipoCorte.Quincena, quincena);
+        corteQuincena.AjustePorProrrateo = ajustePorProrrateo;
+
+        return [corteQuincena, NuevoCorte(TipoCorte.FinDeMes, finDeMes)];
     }
 
     private static Corte NuevoCorte(TipoCorte tipo, decimal valorBase) => new()
@@ -178,9 +257,8 @@ public class LiquidacionesService(RpsDbContext db)
         if (liquidacion is null)
             return LiquidacionErrores.NoEncontrado(id);
 
-        var cortes = await db.Cortes.AsNoTracking().Where(c => c.LiquidacionId == id)
-            .Select(c => new CorteResponse(c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado))
-            .ToListAsync(ct);
+        var cortes = (await db.Cortes.AsNoTracking().Where(c => c.LiquidacionId == id).ToListAsync(ct))
+            .Select(ACorteResponse).ToList();
 
         var honorarios = await db.Honorarios.AsNoTracking()
             .Where(h => h.LiquidacionId == id)
@@ -192,11 +270,11 @@ public class LiquidacionesService(RpsDbContext db)
 
         return new LiquidacionDetalleResponse(
             liquidacion.Id, liquidacion.ColaboradorId, liquidacion.Periodo, liquidacion.NetoConsolidado,
-            liquidacion.Revisado, liquidacion.RevisadoEn, liquidacion.CreadoEn, cortes, honorarios);
+            liquidacion.Revisado, liquidacion.RevisadoEn, liquidacion.RevisadoPorUsuarioId, liquidacion.CreadoEn, cortes, honorarios);
     }
 
     // Control interno de Contabilidad previo a exportar (RN 49); no equivale a pago realizado.
-    public async Task<Resultado<LiquidacionResponse>> MarcarRevisadaAsync(Guid id, CancellationToken ct)
+    public async Task<Resultado<LiquidacionResponse>> MarcarRevisadaAsync(Guid id, Guid usuarioId, CancellationToken ct)
     {
         var liquidacion = await db.Liquidaciones.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (liquidacion is null)
@@ -204,16 +282,17 @@ public class LiquidacionesService(RpsDbContext db)
 
         liquidacion.Revisado = true;
         liquidacion.RevisadoEn = DateTime.UtcNow;
+        liquidacion.RevisadoPorUsuarioId = usuarioId;
         await db.SaveChangesAsync(ct);
 
-        var cortes = await db.Cortes.AsNoTracking().Where(c => c.LiquidacionId == id)
-            .Select(c => new CorteResponse(c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado))
-            .ToListAsync(ct);
+        var cortes = (await db.Cortes.AsNoTracking().Where(c => c.LiquidacionId == id).ToListAsync(ct))
+            .Select(ACorteResponse).ToList();
         return AResponse(liquidacion, cortes);
     }
 
-    private static CorteResponse ACorteResponse(Corte c) => new(c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado);
+    private static CorteResponse ACorteResponse(Corte c) => new(
+        c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado, c.RecuperacionNoAplicada, c.AjustePorProrrateo);
 
     private static LiquidacionResponse AResponse(Liquidacion l, List<CorteResponse> cortes) => new(
-        l.Id, l.ColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado, l.RevisadoEn, l.CreadoEn, cortes);
+        l.Id, l.ColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado, l.RevisadoEn, l.RevisadoPorUsuarioId, l.CreadoEn, cortes);
 }

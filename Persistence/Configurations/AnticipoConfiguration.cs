@@ -22,6 +22,11 @@ public class AnticipoAdicionalConfiguration : IEntityTypeConfiguration<AnticipoA
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(a => a.ColaboradorId);
+
+        // RC 04: protege ediciones/bajas concurrentes del MISMO anticipo (ej. dos personas lo
+        // eliminan a la vez). No alcanza por sí solo para el límite de dos anticipos NUEVOS
+        // simultáneos — eso se resuelve con el bloqueo de fila en AnticiposService.RegistrarAsync.
+        builder.Property<uint>("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsRowVersion();
     }
 }
 
