@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Contratos.Domain;
-using rps_backend.Features.Proyectos.Domain;
 
 namespace rps_backend.Persistence.Configurations;
 
@@ -28,12 +27,32 @@ public class ContratoConfiguration : IEntityTypeConfiguration<Contrato>
             .HasForeignKey(c => c.ColaboradorId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<Proyecto>()
+        // Varios contratos pueden estar vigentes a la vez para el mismo colaborador (distintos
+        // proyectos, o incluso un contrato sin ningún proyecto — ver ContratoProyecto).
+        builder.HasIndex(c => c.ColaboradorId);
+    }
+}
+
+public class ContratoProyectoConfiguration : IEntityTypeConfiguration<ContratoProyecto>
+{
+    public void Configure(EntityTypeBuilder<ContratoProyecto> builder)
+    {
+        builder.ToTable("contrato_proyecto");
+
+        builder.HasKey(cp => cp.Id);
+
+        builder.HasOne<Contrato>()
             .WithMany()
-            .HasForeignKey(c => c.ProyectoId)
+            .HasForeignKey(cp => cp.ContratoId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<rps_backend.Features.Proyectos.Domain.Proyecto>()
+            .WithMany()
+            .HasForeignKey(cp => cp.ProyectoId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Varios contratos pueden estar vigentes a la vez para el mismo colaborador (distintos proyectos).
-        builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId });
+        // Un proyecto no se repite dentro del mismo contrato.
+        builder.HasIndex(cp => new { cp.ContratoId, cp.ProyectoId }).IsUnique();
+        builder.HasIndex(cp => cp.ProyectoId);
     }
 }

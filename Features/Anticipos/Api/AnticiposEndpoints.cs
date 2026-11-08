@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using rps_backend.Features.Anticipos.Application;
 using rps_backend.Shared;
 
@@ -26,8 +28,9 @@ public static class AnticiposEndpoints
             .Produces<AnticipoAdicionalResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        group.MapPost("/", async (Guid id, CrearAnticipoAdicionalRequest request, AnticiposService service, CancellationToken ct) =>
-                (await service.RegistrarAsync(id, request, ct)).AHttp(a => TypedResults.Created($"/api/colaboradores/{id}/anticipos/{a.Id}", a)))
+        group.MapPost("/", async (Guid id, CrearAnticipoAdicionalRequest request, ClaimsPrincipal user, AnticiposService service, CancellationToken ct) =>
+                (await service.RegistrarAsync(id, request, Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!), ct))
+                    .AHttp(a => TypedResults.Created($"/api/colaboradores/{id}/anticipos/{a.Id}", a)))
             .Produces<AnticipoAdicionalResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)

@@ -63,10 +63,17 @@ public class AnticiposService(RpsDbContext db)
     // RN 21, 42-43: el límite es un % (configurable) del neto mensual completo SIN prorratear
     // (todas las condiciones económicas vigentes del colaborador, a tarifa completa).
     public async Task<Resultado<AnticipoAdicionalResponse>> RegistrarAsync(
-        Guid colaboradorId, CrearAnticipoAdicionalRequest request, CancellationToken ct)
+        Guid colaboradorId, CrearAnticipoAdicionalRequest request, Guid usuarioId, CancellationToken ct)
     {
         if (request.Monto is null || request.Monto <= 0)
             return AnticipoErrores.MontoInvalido;
+
+        // RC 04: dos anticipos nuevos para el mismo colaborador pueden llegar casi juntos y los
+        // dos leer el mismo saldo pendiente "de antes" — sin un bloqueo, ambos pasarían el
+        // límite aunque juntos lo superen. Se serializa por colaborador (no bloquea a los demás)
+        // reteniendo la fila hasta el commit.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM rps.colaborador_rps WHERE id = {colaboradorId} FOR UPDATE", ct);
 
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == colaboradorId, ct);
         if (colaborador is null)
@@ -90,11 +97,13 @@ public class AnticiposService(RpsDbContext db)
             ColaboradorId = colaboradorId,
             Monto = request.Monto.Value,
             Fecha = DateOnly.FromDateTime(DateTime.UtcNow),
-            Observaciones = observaciones
+            Observaciones = observaciones,
+            CreadoPor = usuarioId
         };
 
         db.AnticiposAdicionales.Add(anticipo);
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         return await AResponseAsync(anticipo, ct);
     }
@@ -234,6 +243,6 @@ public class AnticiposService(RpsDbContext db)
 
         return new AnticipoAdicionalResponse(
             anticipo.Id, anticipo.ColaboradorId, anticipo.Monto, anticipo.Fecha, anticipo.Observaciones,
-            saldoPendiente, cuotas, anticipo.CreadoEn);
+            saldoPendiente, cuotas, anticipo.CreadoPor, anticipo.CreadoEn);
     }
 }

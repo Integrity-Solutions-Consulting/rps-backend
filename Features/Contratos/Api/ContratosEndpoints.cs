@@ -34,7 +34,7 @@ public static class ContratosEndpoints
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
-        // Solo contratos que aún no han empezado; uno vigente se finaliza con una adenda o editando su fecha fin.
+        // Solo contratos que aún no han empezado; uno vigente se finaliza con una adenda (RN 12: la fecha original no se edita).
         group.MapDelete("/{contratoId:guid}", async (Guid id, Guid contratoId, ContratosService service, CancellationToken ct) =>
                 (await service.EliminarAsync(id, contratoId, ct)).AHttp(_ => TypedResults.NoContent()))
             .Produces(StatusCodes.Status204NoContent)

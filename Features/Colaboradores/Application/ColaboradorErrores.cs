@@ -15,9 +15,6 @@ public static class ColaboradorErrores
 
     // ===== Conflictos =====
 
-    public static Error TmrDuplicado(string tmrColaboradorId) =>
-        Error.Conflicto("Colaborador.TmrDuplicado", $"Ya existe un colaborador con TmrColaboradorId '{tmrColaboradorId}'.");
-
     public static readonly Error Desactivado =
         Error.Conflicto("Colaborador.Desactivado", "El colaborador está desactivado. Actívalo antes de modificar su configuración.");
 
@@ -38,9 +35,6 @@ public static class ColaboradorErrores
             "El colaborador tiene anticipos adicionales con saldo pendiente de recuperar. Actívalo de nuevo cuando se complete su plan de recuperación.");
 
     // ===== Validaciones =====
-
-    public static readonly Error TmrIdInvalido =
-        Error.Validacion("Colaborador.TmrIdInvalido", "tmrColaboradorId", "Es obligatorio y debe tener máximo 50 caracteres.");
 
     public static readonly Error FrecuenciaRequerida =
         Error.Validacion("Colaborador.FrecuenciaRequerida", "frecuencia", "Es obligatoria (DosPagos o FinDeMes).");

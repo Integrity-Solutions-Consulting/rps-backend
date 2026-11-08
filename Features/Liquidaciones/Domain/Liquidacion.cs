@@ -17,5 +17,8 @@ public class Liquidacion
 
     public DateTime? RevisadoEn { get; set; }
 
+    // Quién marcó "Revisado para envío" (RC 03). Null si nunca se ha revisado.
+    public Guid? RevisadoPorUsuarioId { get; set; }
+
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 }

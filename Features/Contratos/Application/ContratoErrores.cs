@@ -27,16 +27,20 @@ public static class ContratoErrores
     public static readonly Error ProyectoInactivo =
         Error.Conflicto("Contrato.ProyectoInactivo", "El proyecto está inactivo. Actívalo antes de registrar contratos.");
 
+    public static readonly Error NoActivoEnTmr =
+        Error.Conflicto("Contrato.NoActivoEnTmr",
+            "El colaborador no está activo en TMR (o todavía no se ha confirmado). Solo se registran contratos para personas activas en TMR.");
+
     public static Error Superpuesto(Guid proyectoId) =>
         Error.Conflicto("Contrato.Superpuesto", $"Ya existe un contrato de este colaborador con el proyecto '{proyectoId}' que se superpone en fechas.");
 
     public static readonly Error NoEliminable =
-        Error.Conflicto("Contrato.NoEliminable", "Solo se pueden eliminar contratos que aún no han empezado. Para terminar uno vigente, registra una adenda o edita su fecha de fin.");
+        Error.Conflicto("Contrato.NoEliminable", "Solo se pueden eliminar contratos que aún no han empezado. Para terminar uno vigente, registra una adenda.");
 
     // ===== Validaciones =====
 
-    public static readonly Error ProyectoRequerido =
-        Error.Validacion("Contrato.ProyectoRequerido", "proyectoId", "Es obligatorio.");
+    public static readonly Error ProyectosDuplicados =
+        Error.Validacion("Contrato.ProyectosDuplicados", "proyectoIds", "No se puede repetir el mismo proyecto dos veces en un contrato.");
 
     public static readonly Error FechaInicioInvalida =
         Error.Validacion("Contrato.FechaInicioInvalida", "fechaInicio", "Es obligatoria.");

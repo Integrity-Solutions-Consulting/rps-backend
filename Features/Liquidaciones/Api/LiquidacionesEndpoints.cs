@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using rps_backend.Features.Liquidaciones.Application;
 using rps_backend.Shared;
 
@@ -25,8 +27,8 @@ public static class LiquidacionesEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         // Control interno previo a exportar (RN 49); no equivale a pago realizado.
-        group.MapPost("/{id:guid}/revisar", async (Guid id, LiquidacionesService service, CancellationToken ct) =>
-                (await service.MarcarRevisadaAsync(id, ct)).AHttp(TypedResults.Ok))
+        group.MapPost("/{id:guid}/revisar", async (Guid id, ClaimsPrincipal user, LiquidacionesService service, CancellationToken ct) =>
+                (await service.MarcarRevisadaAsync(id, Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!), ct)).AHttp(TypedResults.Ok))
             .Produces<LiquidacionResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
