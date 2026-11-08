@@ -82,13 +82,15 @@ public class DashboardService(RpsDbContext db)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        // Indefinido (FechaFin null) nunca vence: no participa de este aviso.
         var fechasFinVigente = contratos.Select(c =>
         {
+            if (c.FechaFin is null) return (DateOnly?)null;
             var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
             return maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin;
         }).ToList();
 
-        int ContarHasta(int dias) => fechasFinVigente.Count(f => f >= hoy && f <= hoy.AddDays(dias));
+        int ContarHasta(int dias) => fechasFinVigente.Count(f => f is not null && f >= hoy && f <= hoy.AddDays(dias));
 
         return new ContratosPorVencerResumen(ContarHasta(30), ContarHasta(15), ContarHasta(7));
     }

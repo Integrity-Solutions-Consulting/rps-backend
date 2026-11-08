@@ -732,7 +732,7 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
-                    b.Property<DateOnly>("FechaFin")
+                    b.Property<DateOnly?>("FechaFin")
                         .HasColumnType("date")
                         .HasColumnName("fecha_fin");
 

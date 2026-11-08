@@ -4,8 +4,10 @@ namespace rps_backend.Features.Contratos.Application;
 
 // ProyectoIds puede ser null o vacío: un contrato puede cubrir uno, varios o ningún proyecto
 // (personal de RR. HH. sin proyecto en TMR todavía tiene contrato).
+// Indefinido = true ignora FechaFin: el contrato queda sin fecha de fin (nunca vence, sin adendas).
 public record CrearContratoRequest(
-    List<Guid>? ProyectoIds, DateOnly? FechaInicio, DateOnly? FechaFin, string? Referencia, string? Observaciones);
+    List<Guid>? ProyectoIds, DateOnly? FechaInicio, DateOnly? FechaFin, string? Referencia, string? Observaciones,
+    bool Indefinido = false);
 
 // Sin FechaFin: la fecha de fin original no se edita (RN 12). Para extenderla se usa una Adenda.
 // Sin ProyectoIds: la lista de proyectos de un contrato no se edita después de creado — para
@@ -23,8 +25,9 @@ public record ContratoResponse(
     Guid ColaboradorId,
     List<ProyectoDeContratoResponse> Proyectos,
     DateOnly FechaInicio,
-    DateOnly FechaFin,
-    DateOnly FechaFinVigente,
+    // Null = indefinido (sin fecha de fin).
+    DateOnly? FechaFin,
+    DateOnly? FechaFinVigente,
     string? Referencia,
     string? Observaciones,
     bool Vigente);

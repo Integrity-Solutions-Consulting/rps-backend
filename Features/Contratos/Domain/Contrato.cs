@@ -13,7 +13,8 @@ public class Contrato
     public DateOnly FechaInicio { get; set; }
 
     // Fecha original acordada: una adenda la extiende pero no la reemplaza (ver Adenda.NuevaFechaFin).
-    public DateOnly FechaFin { get; set; }
+    // Null = contrato indefinido (sin fecha de fin); nunca vence y no admite adendas.
+    public DateOnly? FechaFin { get; set; }
 
     public string? Referencia { get; set; }
 
