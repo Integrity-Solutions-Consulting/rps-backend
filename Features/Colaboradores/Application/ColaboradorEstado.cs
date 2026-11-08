@@ -41,8 +41,10 @@ public static class ColaboradorEstado
 
             tieneContratoVigente = contratosIniciados.Any(c =>
             {
+                // Indefinido (sin fecha de fin): siempre vigente una vez iniciado.
+                if (c.FechaFin is null) return true;
                 var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
-                var fechaFinVigente = maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin;
+                var fechaFinVigente = maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin.Value;
                 return fechaFinVigente >= hoy;
             });
         }

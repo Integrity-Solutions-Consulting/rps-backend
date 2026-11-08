@@ -77,7 +77,8 @@ public class HistorialService(RpsDbContext db)
         {
             var enlace = new EnlaceEvento("Ver contrato", "/contratos", new() { ["contrato"] = c.Id.ToString() });
             var proyecto = proyectosPorContrato.GetValueOrDefault(c.Id, "sin proyecto");
-            eventos.Add(new(c.CreadoEn, "Contrato", $"Contrato {c.Referencia} en {proyecto}: del {c.FechaInicio:yyyy-MM-dd} al {c.FechaFin:yyyy-MM-dd}.",
+            var finTexto = c.FechaFin.HasValue ? c.FechaFin.Value.ToString("yyyy-MM-dd") : "indefinido";
+            eventos.Add(new(c.CreadoEn, "Contrato", $"Contrato {c.Referencia} en {proyecto}: del {c.FechaInicio:yyyy-MM-dd} al {finTexto}.",
                 null, PeriodoTexto.Formato(c.FechaInicio), null, "Registrado", enlace));
             var numero = 1;
             foreach (var a in adendas.Where(x => x.ContratoId == c.Id).OrderBy(x => x.CreadoEn))

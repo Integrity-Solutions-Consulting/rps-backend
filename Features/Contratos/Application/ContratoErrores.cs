@@ -37,6 +37,9 @@ public static class ContratoErrores
     public static readonly Error NoEliminable =
         Error.Conflicto("Contrato.NoEliminable", "Solo se pueden eliminar contratos que aún no han empezado. Para terminar uno vigente, registra una adenda.");
 
+    public static readonly Error ContratoIndefinido =
+        Error.Conflicto("Contrato.Indefinido", "Este contrato es indefinido (sin fecha de fin): no admite adendas.");
+
     // ===== Validaciones =====
 
     public static readonly Error ProyectosDuplicados =
@@ -46,7 +49,8 @@ public static class ContratoErrores
         Error.Validacion("Contrato.FechaInicioInvalida", "fechaInicio", "Es obligatoria.");
 
     public static readonly Error FechaFinInvalida =
-        Error.Validacion("Contrato.FechaFinInvalida", "fechaFin", "Es obligatoria y debe ser igual o posterior a la fecha de inicio.");
+        Error.Validacion("Contrato.FechaFinInvalida", "fechaFin",
+            "Es obligatoria y debe ser igual o posterior a la fecha de inicio, salvo que el contrato sea indefinido.");
 
     public static readonly Error ReferenciaInvalida =
         Error.Validacion("Contrato.ReferenciaInvalida", "referencia", "Debe tener máximo 100 caracteres.");

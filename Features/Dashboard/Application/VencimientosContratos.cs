@@ -53,7 +53,9 @@ public class VencimientosContratosService(RpsDbContext db)
             .GroupBy(a => a.ContratoId)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
-        DateOnly FinVigente(Contrato c) => maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin;
+        // Indefinido (FechaFin null) nunca vence: Fin queda null y no participa de este aviso.
+        DateOnly? FinVigente(Contrato c) =>
+            c.FechaFin is null ? null : (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin);
 
         // Un contrato sin proyecto (ej. personal de RR. HH.) no participa de este aviso: no hay
         // asignación de TMR contra la que revisar su vigencia.
@@ -73,17 +75,18 @@ public class VencimientosContratosService(RpsDbContext db)
             .Select(a => (a.ColaboradorId, a.ProyectoId))
             .ToHashSet();
 
-        // Pares colaborador-proyecto que ya tienen un contrato vigente (renovado): sus contratos viejos no se avisan.
+        // Pares colaborador-proyecto que ya tienen un contrato vigente (renovado, o indefinido): sus
+        // contratos viejos no se avisan.
         var conContratoVigente = conProyecto
-            .Where(x => x.Fin >= hoy)
+            .Where(x => x.Fin is null || x.Fin >= hoy)
             .Select(x => (x.Contrato.ColaboradorId, x.ProyectoId))
             .ToHashSet();
 
         var elegidos = conProyecto.Where(x =>
         {
             var par = (x.Contrato.ColaboradorId, x.ProyectoId);
-            var porVencer = x.Fin >= hoy && x.Fin <= limite;
-            var vencidoConAsignacion = x.Fin < hoy && activas.Contains(par) && !conContratoVigente.Contains(par);
+            var porVencer = x.Fin is not null && x.Fin >= hoy && x.Fin <= limite;
+            var vencidoConAsignacion = x.Fin is not null && x.Fin < hoy && activas.Contains(par) && !conContratoVigente.Contains(par);
             return porVencer || vencidoConAsignacion;
         }).ToList();
 
@@ -113,8 +116,8 @@ public class VencimientosContratosService(RpsDbContext db)
                     c?.Apellidos,
                     x.ProyectoId,
                     proyectos.GetValueOrDefault(x.ProyectoId, string.Empty),
-                    x.Fin,
-                    x.Fin.DayNumber - hoy.DayNumber,
+                    x.Fin!.Value,
+                    x.Fin.Value.DayNumber - hoy.DayNumber,
                     activas.Contains((x.Contrato.ColaboradorId, x.ProyectoId)));
             })
             .OrderBy(v => v.DiasRestantes)

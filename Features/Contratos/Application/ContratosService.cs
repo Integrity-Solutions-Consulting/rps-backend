@@ -43,8 +43,8 @@ public class ContratosService(RpsDbContext db)
 
     public async Task<Resultado<ContratoResponse>> CrearAsync(Guid colaboradorId, CrearContratoRequest request, CancellationToken ct)
     {
-        var validacion = Validar(request.FechaInicio, request.FechaFin, request.Referencia, request.Observaciones,
-            out var referencia, out var observaciones);
+        var validacion = Validar(request.FechaInicio, request.FechaFin, request.Indefinido, request.Referencia, request.Observaciones,
+            out var fechaFin, out var referencia, out var observaciones);
         if (validacion is not null)
             return validacion;
 
@@ -80,7 +80,7 @@ public class ContratosService(RpsDbContext db)
 
             // Evita doble reconocimiento de importes: no se permite otro contrato de este
             // colaborador que ya cubra el mismo proyecto y se superponga en fechas.
-            var superpuesto = await ProyectoSuperpuestoAsync(colaboradorId, proyectoIds, request.FechaInicio!.Value, request.FechaFin!.Value, ct);
+            var superpuesto = await ProyectoSuperpuestoAsync(colaboradorId, proyectoIds, request.FechaInicio!.Value, fechaFin, ct);
             if (superpuesto is not null)
                 return ContratoErrores.Superpuesto(superpuesto.Value);
         }
@@ -89,7 +89,7 @@ public class ContratosService(RpsDbContext db)
         {
             ColaboradorId = colaboradorId,
             FechaInicio = request.FechaInicio!.Value,
-            FechaFin = request.FechaFin!.Value,
+            FechaFin = fechaFin,
             Referencia = referencia,
             Observaciones = observaciones
         };
@@ -203,6 +203,9 @@ public class ContratosService(RpsDbContext db)
         if (contrato is null)
             return ContratoErrores.NoEncontrado(contratoId);
 
+        if (contrato.FechaFin is null)
+            return ContratoErrores.ContratoIndefinido;
+
         var fechaFinVigente = await FechaFinVigenteAsync(contrato, ct);
 
         if (request.NuevaFechaFin is null || request.NuevaFechaFin <= fechaFinVigente)
@@ -230,21 +233,24 @@ public class ContratosService(RpsDbContext db)
         return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones);
     }
 
+    // Solo se llama con contratos que no son indefinidos (se valida antes en RegistrarAdendaAsync).
     private async Task<DateOnly> FechaFinVigenteAsync(Contrato contrato, CancellationToken ct)
     {
+        var fechaFin = contrato.FechaFin!.Value;
         var maxAdenda = await db.Adendas.AsNoTracking()
             .Where(a => a.ContratoId == contrato.Id)
             .Select(a => a.NuevaFechaFin)
             .OrderByDescending(f => f)
             .FirstOrDefaultAsync(ct);
 
-        return maxAdenda == default ? contrato.FechaFin : (maxAdenda > contrato.FechaFin ? maxAdenda : contrato.FechaFin);
+        return maxAdenda == default ? fechaFin : (maxAdenda > fechaFin ? maxAdenda : fechaFin);
     }
 
     // Busca, entre los proyectos pedidos, alguno que ya esté cubierto por otro contrato vigente
-    // de este colaborador en un rango que se superpone con [fechaInicio, fechaFin].
+    // de este colaborador en un rango que se superpone con [fechaInicio, fechaFin]. fechaFin null
+    // (indefinido) se trata como "sin límite": siempre se superpone hacia adelante.
     private async Task<Guid?> ProyectoSuperpuestoAsync(
-        Guid colaboradorId, List<Guid> proyectoIds, DateOnly fechaInicio, DateOnly fechaFin, CancellationToken ct)
+        Guid colaboradorId, List<Guid> proyectoIds, DateOnly fechaInicio, DateOnly? fechaFin, CancellationToken ct)
     {
         var candidatos = await db.ContratosProyectos.AsNoTracking()
             .Where(cp => proyectoIds.Contains(cp.ProyectoId))
@@ -264,9 +270,16 @@ public class ContratosService(RpsDbContext db)
 
         foreach (var x in candidatos)
         {
-            var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(x.Contrato.Id);
-            var finVigente = maxAdenda > x.Contrato.FechaFin ? maxAdenda : x.Contrato.FechaFin;
-            if (fechaInicio <= finVigente && fechaFin >= x.Contrato.FechaInicio)
+            DateOnly? finVigente = null;
+            if (x.Contrato.FechaFin is not null)
+            {
+                var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(x.Contrato.Id);
+                finVigente = maxAdenda > x.Contrato.FechaFin ? maxAdenda : x.Contrato.FechaFin;
+            }
+
+            var seSuperponeInicio = finVigente is null || fechaInicio <= finVigente;
+            var seSuperponeFin = fechaFin is null || fechaFin >= x.Contrato.FechaInicio;
+            if (seSuperponeInicio && seSuperponeFin)
                 return x.ProyectoId;
         }
 
@@ -295,29 +308,41 @@ public class ContratosService(RpsDbContext db)
 
         return contratos.Select(c =>
         {
-            var fechaFinVigente = maxAdendaPorContrato.TryGetValue(c.Id, out var maxAdenda) && maxAdenda > c.FechaFin
-                ? maxAdenda
-                : c.FechaFin;
+            DateOnly? fechaFinVigente = null;
+            if (c.FechaFin is not null)
+            {
+                fechaFinVigente = maxAdendaPorContrato.TryGetValue(c.Id, out var maxAdenda) && maxAdenda > c.FechaFin
+                    ? maxAdenda
+                    : c.FechaFin;
+            }
+
+            var vigente = c.FechaInicio <= hoy && (fechaFinVigente is null || fechaFinVigente >= hoy);
 
             return new ContratoResponse(
                 c.Id, c.ColaboradorId, proyectosPorContrato.GetValueOrDefault(c.Id, []),
                 c.FechaInicio, c.FechaFin, fechaFinVigente, c.Referencia, c.Observaciones,
-                Vigente: c.FechaInicio <= hoy && fechaFinVigente >= hoy);
+                Vigente: vigente);
         }).ToList();
     }
 
     private static Error? Validar(
-        DateOnly? fechaInicio, DateOnly? fechaFin, string? referenciaInput, string? observacionesInput,
-        out string? referencia, out string? observaciones)
+        DateOnly? fechaInicio, DateOnly? fechaFin, bool indefinido, string? referenciaInput, string? observacionesInput,
+        out DateOnly? fechaFinValidada, out string? referencia, out string? observaciones)
     {
         referencia = string.IsNullOrWhiteSpace(referenciaInput) ? null : referenciaInput.Trim();
         observaciones = string.IsNullOrWhiteSpace(observacionesInput) ? null : observacionesInput.Trim();
+        fechaFinValidada = null;
 
         if (fechaInicio is null)
             return ContratoErrores.FechaInicioInvalida;
 
-        if (fechaFin is null || fechaFin < fechaInicio)
-            return ContratoErrores.FechaFinInvalida;
+        // Indefinido gana sobre cualquier fechaFin que haya llegado en la solicitud.
+        if (!indefinido)
+        {
+            if (fechaFin is null || fechaFin < fechaInicio)
+                return ContratoErrores.FechaFinInvalida;
+            fechaFinValidada = fechaFin;
+        }
 
         if (referencia?.Length > 100)
             return ContratoErrores.ReferenciaInvalida;
