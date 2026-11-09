@@ -21,7 +21,8 @@ public class ConfiguracionService(RpsDbContext db)
             return ConfiguracionErrores.RazonSocialInvalida;
 
         var ruc = request.Ruc?.Trim();
-        if (string.IsNullOrEmpty(ruc) || ruc.Length > 20)
+        // RUC de Ecuador: 13 dígitos. Se guarda como texto porque puede empezar con 0.
+        if (ruc is null || ruc.Length != 13 || !ruc.All(char.IsAsciiDigit))
             return ConfiguracionErrores.RucInvalido;
 
         var moneda = request.Moneda?.Trim().ToUpperInvariant();

@@ -9,7 +9,7 @@ public static class ConfiguracionErrores
         Error.Validacion("Configuracion.RazonSocialInvalida", "razonSocial", "Es obligatoria y debe tener máximo 200 caracteres.");
 
     public static readonly Error RucInvalido =
-        Error.Validacion("Configuracion.RucInvalido", "ruc", "Es obligatorio y debe tener máximo 20 caracteres.");
+        Error.Validacion("Configuracion.RucInvalido", "ruc", "Debe tener exactamente 13 dígitos numéricos.");
 
     public static readonly Error MonedaInvalida =
         Error.Validacion("Configuracion.MonedaInvalida", "moneda", "Es obligatoria y debe ser un código de 3 letras (ej. USD).");
