@@ -10,3 +10,5 @@ public record UsuarioAdminResponse(
     IReadOnlyList<string> Roles);
 
 public record CambiarEstadoUsuarioRequest(bool Activo);
+
+public record CambiarRolUsuarioRequest(string Rol);

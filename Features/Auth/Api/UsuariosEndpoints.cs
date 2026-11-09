@@ -26,6 +26,17 @@ public static class UsuariosEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        // Administrador y Administrador Contable (este último con límites, ver UsuariosService.CambiarRolAsync).
+        group.MapPut("/{id:guid}/rol", async (Guid id, CambiarRolUsuarioRequest request, ClaimsPrincipal user, UsuariosService service, CancellationToken ct) =>
+                (await service.CambiarRolAsync(
+                    Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!),
+                    user.IsInRole("Administrador"),
+                    id, request.Rol, ct)).AHttp(TypedResults.Ok))
+            .Produces<UsuarioAdminResponse>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         return app;
     }
 }
