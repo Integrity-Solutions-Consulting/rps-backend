@@ -9,4 +9,7 @@ public class Rol
     public string? Descripcion { get; set; }
 
     public bool Activo { get; set; } = true;
+
+    // Módulos de RPS que pueden usar los usuarios con este rol (ver PermisosModulo).
+    public List<string> Permisos { get; set; } = [];
 }

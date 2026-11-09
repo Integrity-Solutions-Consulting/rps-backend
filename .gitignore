@@ -48,3 +48,8 @@ logs/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# ===== Graphify & Antigravity (local) =====
+graphify-out/
+.agents/
+

@@ -22,7 +22,7 @@ public static class BootstrapService
         foreach (var nombreRol in RolesIniciales)
         {
             if (!await db.Roles.AnyAsync(r => r.Nombre == nombreRol))
-                db.Roles.Add(new Rol { Nombre = nombreRol });
+                db.Roles.Add(new Rol { Nombre = nombreRol, Permisos = [.. PermisosModulo.PorDefecto(nombreRol)] });
         }
         await db.SaveChangesAsync();
         Console.WriteLine($"Bootstrap: roles sembrados ({string.Join(", ", RolesIniciales)}).");

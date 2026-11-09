@@ -25,5 +25,9 @@ public class RolConfiguration : IEntityTypeConfiguration<Rol>
         builder.Property(r => r.Activo)
             .HasDefaultValue(true)
             .HasSentinel(true);
+
+        builder.Property(r => r.Permisos)
+            .HasColumnType("text[]")
+            .IsRequired();
     }
 }

@@ -122,6 +122,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<FeriadosService>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UsuariosService>();
+builder.Services.AddScoped<RolesService>();
 // Sin Tmr:BaseUrl la app arranca igual: solo la sincronización responde que TMR no está disponible.
 builder.Services.AddHttpClient<ITmrGateway, TmrHttpGateway>(client =>
 {
@@ -242,6 +244,8 @@ app.UseAuthorization();
 app.UseMiddleware<IdempotenciaMiddleware>();
 
 app.MapAuthEndpoints();
+app.MapUsuariosEndpoints();
+app.MapRolesEndpoints();
 app.MapColaboradoresEndpoints();
 app.MapContratosEndpoints();
 app.MapProyectosEndpoints();
