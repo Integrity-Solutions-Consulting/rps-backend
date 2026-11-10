@@ -92,6 +92,11 @@ public class DashboardService(RpsDbContext db)
 
         int ContarHasta(int dias) => fechasFinVigente.Count(f => f is not null && f >= hoy && f <= hoy.AddDays(dias));
 
-        return new ContratosPorVencerResumen(ContarHasta(30), ContarHasta(15), ContarHasta(7));
+        // RN 13: plazos configurables. Sin fila de configuración se usan los valores por defecto de la entidad.
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstOrDefaultAsync(ct)
+            ?? new Configuracion.Domain.ConfiguracionGlobal();
+        var (aviso1, aviso2, aviso3) = (config.DiasAvisoVencimiento1, config.DiasAvisoVencimiento2, config.DiasAvisoVencimiento3);
+
+        return new ContratosPorVencerResumen(aviso1, aviso2, aviso3, ContarHasta(aviso1), ContarHasta(aviso2), ContarHasta(aviso3));
     }
 }

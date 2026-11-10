@@ -38,6 +38,22 @@ public class ConfiguracionService(RpsDbContext db)
         if (request.DiaPagoDosPagos2 is not (>= 1 and <= 31))
             return ConfiguracionErrores.DiaPagoInvalido("diaPagoDosPagos2");
 
+        // RN 13: plazos de aviso de vencimiento, cada uno menor que el anterior (ej. 30, 15, 7).
+        if (request.DiasAvisoVencimiento1 is not (>= 1 and <= 365))
+            return ConfiguracionErrores.DiasAvisoInvalido("diasAvisoVencimiento1");
+
+        if (request.DiasAvisoVencimiento2 is not (>= 1 and <= 365))
+            return ConfiguracionErrores.DiasAvisoInvalido("diasAvisoVencimiento2");
+
+        if (request.DiasAvisoVencimiento3 is not (>= 1 and <= 365))
+            return ConfiguracionErrores.DiasAvisoInvalido("diasAvisoVencimiento3");
+
+        if (request.DiasAvisoVencimiento2 >= request.DiasAvisoVencimiento1)
+            return ConfiguracionErrores.DiasAvisoFueraDeOrden("diasAvisoVencimiento2");
+
+        if (request.DiasAvisoVencimiento3 >= request.DiasAvisoVencimiento2)
+            return ConfiguracionErrores.DiasAvisoFueraDeOrden("diasAvisoVencimiento3");
+
         if (request.PorcentajeMaximoAnticipo is not (>= 0 and <= 100))
             return ConfiguracionErrores.PorcentajeInvalido("porcentajeMaximoAnticipo");
 
@@ -61,6 +77,9 @@ public class ConfiguracionService(RpsDbContext db)
         config.DiaPagoFinDeMes = request.DiaPagoFinDeMes.Value;
         config.DiaPagoDosPagos1 = request.DiaPagoDosPagos1.Value;
         config.DiaPagoDosPagos2 = request.DiaPagoDosPagos2.Value;
+        config.DiasAvisoVencimiento1 = request.DiasAvisoVencimiento1.Value;
+        config.DiasAvisoVencimiento2 = request.DiasAvisoVencimiento2.Value;
+        config.DiasAvisoVencimiento3 = request.DiasAvisoVencimiento3.Value;
         config.PorcentajeMaximoAnticipo = request.PorcentajeMaximoAnticipo.Value;
         config.PorcentajeIva = request.PorcentajeIva.Value;
         config.PorcentajeRetencionFuente = request.PorcentajeRetencionFuente.Value;
@@ -90,6 +109,7 @@ public class ConfiguracionService(RpsDbContext db)
 
     private static ConfiguracionResponse AResponse(Domain.ConfiguracionGlobal c) => new(
         c.Id, c.RazonSocial, c.Ruc, c.Moneda, c.DiaPagoFinDeMes, c.DiaPagoDosPagos1, c.DiaPagoDosPagos2,
+        c.DiasAvisoVencimiento1, c.DiasAvisoVencimiento2, c.DiasAvisoVencimiento3,
         c.PorcentajeMaximoAnticipo, c.PorcentajeIva, c.PorcentajeRetencionFuente,
         c.PorcentajeRetencionIvaProfesional, c.PorcentajeRetencionIvaJunior, c.ActualizadoEn);
 }

@@ -620,6 +620,18 @@ namespace rps_backend.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("dia_pago_fin_de_mes");
 
+                    b.Property<int>("DiasAvisoVencimiento1")
+                        .HasColumnType("integer")
+                        .HasColumnName("dias_aviso_vencimiento1");
+
+                    b.Property<int>("DiasAvisoVencimiento2")
+                        .HasColumnType("integer")
+                        .HasColumnName("dias_aviso_vencimiento2");
+
+                    b.Property<int>("DiasAvisoVencimiento3")
+                        .HasColumnType("integer")
+                        .HasColumnName("dias_aviso_vencimiento3");
+
                     b.Property<string>("Moneda")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -671,6 +683,9 @@ namespace rps_backend.Migrations
                             DiaPagoDosPagos1 = 15,
                             DiaPagoDosPagos2 = 30,
                             DiaPagoFinDeMes = 30,
+                            DiasAvisoVencimiento1 = 30,
+                            DiasAvisoVencimiento2 = 15,
+                            DiasAvisoVencimiento3 = 7,
                             Moneda = "USD",
                             PorcentajeIva = 15m,
                             PorcentajeMaximoAnticipo = 100m,

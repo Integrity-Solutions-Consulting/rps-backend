@@ -17,6 +17,12 @@ public static class ConfiguracionErrores
     public static Error DiaPagoInvalido(string campo) =>
         Error.Validacion("Configuracion.DiaPagoInvalido", campo, "Debe ser un día válido del mes (1 a 31).");
 
+    public static Error DiasAvisoInvalido(string campo) =>
+        Error.Validacion("Configuracion.DiasAvisoInvalido", campo, "Debe ser un número de días entre 1 y 365.");
+
+    public static Error DiasAvisoFueraDeOrden(string campo) =>
+        Error.Validacion("Configuracion.DiasAvisoFueraDeOrden", campo, "Debe ser menor que el aviso anterior: los avisos van de mayor a menor.");
+
     public static Error PorcentajeInvalido(string campo) =>
         Error.Validacion("Configuracion.PorcentajeInvalido", campo, "Es obligatorio y debe estar entre 0 y 100.");
 }

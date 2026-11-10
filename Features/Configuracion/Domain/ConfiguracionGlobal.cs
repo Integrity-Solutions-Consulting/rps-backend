@@ -16,6 +16,13 @@ public class ConfiguracionGlobal
 
     public int DiaPagoDosPagos2 { get; set; } = 30;
 
+    // RN 13: días antes del fin vigente de un contrato en que Inicio avisa (de mayor a menor).
+    public int DiasAvisoVencimiento1 { get; set; } = 30;
+
+    public int DiasAvisoVencimiento2 { get; set; } = 15;
+
+    public int DiasAvisoVencimiento3 { get; set; } = 7;
+
     // Todos los porcentajes se guardan en puntos (15 = 15%), no como fracción.
 
     // Límite de un Anticipo adicional: % del neto mensual completo consolidado (RN 42-43).

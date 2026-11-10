@@ -19,18 +19,21 @@ public record VencimientoContratoResponse(
     bool AsignacionActiva);
 
 // Contratos que hay que mirar en Inicio (RN 13, RN 14, RN 15):
-//  - por vencer: fin vigente (con adendas) entre hoy y hoy + "dias";
+//  - por vencer: fin vigente (con adendas) entre hoy y hoy + "dias" (sin "dias": el primer aviso configurado, RN 13);
 //  - vencidos con la asignación todavía activa y sin otro contrato vigente para el mismo proyecto.
 // Un contrato puede cubrir varios proyectos (o ninguno): se avisa por cada par contrato-proyecto,
 // porque un proyecto puede necesitar revisión mientras otro del mismo contrato sigue sin problema.
 // Solo informa: el vencimiento no bloquea la liquidación.
 public class VencimientosContratosService(RpsDbContext db)
 {
+    // Solo si no existe la fila de configuración (mismo valor por defecto que ConfiguracionGlobal).
     public const int DiasPorDefecto = 30;
 
     public async Task<List<VencimientoContratoResponse>> ListarAsync(int? dias, CancellationToken ct)
     {
-        var plazo = dias is > 0 and <= 365 ? dias.Value : DiasPorDefecto;
+        var plazo = dias is > 0 and <= 365
+            ? dias.Value
+            : (await db.ConfiguracionGlobal.AsNoTracking().Select(c => (int?)c.DiasAvisoVencimiento1).FirstOrDefaultAsync(ct)) ?? DiasPorDefecto;
         var hoy = HoyEnEcuador();
         var limite = hoy.AddDays(plazo);
 
