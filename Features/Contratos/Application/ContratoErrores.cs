@@ -61,6 +61,10 @@ public static class ContratoErrores
     public static readonly Error ObservacionesInvalidas =
         Error.Validacion("Contrato.ObservacionesInvalidas", "observaciones", "Debe tener máximo 500 caracteres.");
 
+    // Fechas de contrato y adenda: desde el año 2000 y con año de 4 dígitos (evita 20266 o 0202).
+    public static Error FechaFueraDeRango(string campo) =>
+        Error.Validacion("Contrato.FechaFueraDeRango", campo, "La fecha debe ser desde el año 2000 y el año de 4 dígitos.");
+
     public static readonly Error NuevaFechaFinInvalida =
         Error.Validacion("Contrato.NuevaFechaFinInvalida", "nuevaFechaFin", "Es obligatoria y debe ser posterior a la fecha de fin vigente actual.");
 }

@@ -253,6 +253,8 @@ public class ContratosService(RpsDbContext db)
 
         if (request.NuevaFechaFin is null || request.NuevaFechaFin <= fechaFinVigente)
             return ContratoErrores.NuevaFechaFinInvalida;
+        if (!FechaEnRango(request.NuevaFechaFin.Value))
+            return ContratoErrores.FechaFueraDeRango("nuevaFechaFin");
 
         var adenda = new Adenda
         {
@@ -304,6 +306,8 @@ public class ContratosService(RpsDbContext db)
 
         if (request.NuevaFechaFin is null || request.NuevaFechaFin <= fechaFinVigenteSinEsta)
             return ContratoErrores.NuevaFechaFinInvalida;
+        if (!FechaEnRango(request.NuevaFechaFin.Value))
+            return ContratoErrores.FechaFueraDeRango("nuevaFechaFin");
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -426,11 +430,16 @@ public class ContratosService(RpsDbContext db)
         if (fechaInicio is null)
             return ContratoErrores.FechaInicioInvalida;
 
+        if (!FechaEnRango(fechaInicio.Value))
+            return ContratoErrores.FechaFueraDeRango("fechaInicio");
+
         // Indefinido gana sobre cualquier fechaFin que haya llegado en la solicitud.
         if (!indefinido)
         {
             if (fechaFin is null || fechaFin < fechaInicio)
                 return ContratoErrores.FechaFinInvalida;
+            if (!FechaEnRango(fechaFin.Value))
+                return ContratoErrores.FechaFueraDeRango("fechaFin");
             fechaFinValidada = fechaFin;
         }
 
@@ -444,4 +453,7 @@ public class ContratosService(RpsDbContext db)
     }
 
     private static DateOnly Hoy() => DateOnly.FromDateTime(DateTime.UtcNow);
+
+    // Año desde 2000 y de 4 dígitos (DateOnly ya no admite más de 9999).
+    private static bool FechaEnRango(DateOnly fecha) => fecha.Year >= 2000;
 }
