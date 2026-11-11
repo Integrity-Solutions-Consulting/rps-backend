@@ -5,7 +5,8 @@ using rps_backend.Shared;
 
 namespace rps_backend.Features.Honorarios.Application;
 
-// Reglas de negocio de Condiciones Económicas (honorario mensual fijo por colaborador+proyecto).
+// Reglas de negocio de Condiciones Económicas: el honorario mensual fijo de un contrato, que se
+// paga por contrato (un solo importe, sin proyecto) o por proyecto (un importe por cada proyecto).
 public class CondicionesEconomicasService(RpsDbContext db)
 {
     public async Task<Resultado<List<CondicionEconomicaResponse>>> ListarAsync(Guid colaboradorId, CancellationToken ct)
@@ -13,22 +14,23 @@ public class CondicionesEconomicasService(RpsDbContext db)
         if (!await db.ColaboradoresRps.AnyAsync(c => c.Id == colaboradorId, ct))
             return CondicionEconomicaErrores.ColaboradorNoEncontrado(colaboradorId);
 
-        return await db.CondicionesEconomicas.AsNoTracking()
+        var condiciones = await db.CondicionesEconomicas.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId)
-            .Join(db.Proyectos.AsNoTracking(), c => c.ProyectoId, p => p.Id, (c, p) => new { Condicion = c, ProyectoNombre = p.Nombre })
-            .OrderByDescending(x => x.Condicion.MesInicioVigencia)
-            .Select(x => new CondicionEconomicaResponse(
-                x.Condicion.Id, x.Condicion.ColaboradorId, x.Condicion.ProyectoId, x.ProyectoNombre, x.Condicion.ContratoId,
-                x.Condicion.ImporteMensual, x.Condicion.Modalidad, x.Condicion.MesInicioVigencia, x.Condicion.Observaciones))
+            .OrderByDescending(c => c.MesInicioVigencia)
             .ToListAsync(ct);
+
+        var proyectoIds = condiciones.Where(c => c.ProyectoId is not null).Select(c => c.ProyectoId!.Value).Distinct().ToList();
+        var nombres = await db.Proyectos.AsNoTracking()
+            .Where(p => proyectoIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Nombre, ct);
+
+        return condiciones.Select(c => AResponse(c, c.ProyectoId is { } id ? nombres.GetValueOrDefault(id) : null)).ToList();
     }
 
+    // ProyectoId null = pago por contrato: un solo importe fijo para todo el contrato.
     public async Task<Resultado<CondicionEconomicaResponse>> CrearAsync(
         Guid colaboradorId, CrearCondicionEconomicaRequest request, CancellationToken ct)
     {
-        if (request.ProyectoId is null)
-            return CondicionEconomicaErrores.ProyectoRequerido;
-
         if (request.ContratoId is null)
             return CondicionEconomicaErrores.ContratoRequerido;
 
@@ -44,18 +46,27 @@ public class CondicionesEconomicasService(RpsDbContext db)
         if (!await db.ColaboradoresRps.AnyAsync(c => c.Id == colaboradorId, ct))
             return CondicionEconomicaErrores.ColaboradorNoEncontrado(colaboradorId);
 
-        if (!await db.Proyectos.AnyAsync(p => p.Id == request.ProyectoId, ct))
-            return CondicionEconomicaErrores.ProyectoNoEncontrado(request.ProyectoId.Value);
-
-        // Un contrato puede cubrir varios proyectos: el honorario solo se puede registrar para uno
-        // que ese contrato efectivamente incluya.
-        var contratoValido = await db.Contratos.AnyAsync(c => c.Id == request.ContratoId && c.ColaboradorId == colaboradorId, ct)
-            && await db.ContratosProyectos.AnyAsync(cp => cp.ContratoId == request.ContratoId && cp.ProyectoId == request.ProyectoId, ct);
-        if (!contratoValido)
+        if (!await db.Contratos.AnyAsync(c => c.Id == request.ContratoId && c.ColaboradorId == colaboradorId, ct))
             return CondicionEconomicaErrores.ContratoNoEncontrado(request.ContratoId.Value);
 
-        var existente = await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
-            c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId && c.MesInicioVigencia == mesInicioVigencia, ct);
+        if (request.ProyectoId is { } proyectoId)
+        {
+            if (!await db.Proyectos.AnyAsync(p => p.Id == proyectoId, ct))
+                return CondicionEconomicaErrores.ProyectoNoEncontrado(proyectoId);
+
+            // Pago por proyecto: solo para un proyecto que ese contrato efectivamente incluya.
+            if (!await db.ContratosProyectos.AnyAsync(cp => cp.ContratoId == request.ContratoId && cp.ProyectoId == proyectoId, ct))
+                return CondicionEconomicaErrores.ContratoNoEncontrado(request.ContratoId.Value);
+        }
+
+        var existente = request.ProyectoId is null
+            ? await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
+                c.ContratoId == request.ContratoId && c.ProyectoId == null && c.MesInicioVigencia == mesInicioVigencia, ct)
+            : await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
+                c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId && c.MesInicioVigencia == mesInicioVigencia, ct);
+
+        var observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
+
         if (existente is not null)
         {
             if (!request.Reemplazar)
@@ -70,21 +81,16 @@ public class CondicionesEconomicasService(RpsDbContext db)
             existente.ImporteMensual = request.ImporteMensual.Value;
             existente.Modalidad = request.Modalidad.Value;
             if (request.Observaciones is not null)
-                existente.Observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
+                existente.Observaciones = observaciones;
             await db.SaveChangesAsync(ct);
 
-            var nombre = await db.Proyectos.AsNoTracking().Where(p => p.Id == existente.ProyectoId).Select(p => p.Nombre).FirstAsync(ct);
-            return new CondicionEconomicaResponse(
-                existente.Id, existente.ColaboradorId, existente.ProyectoId, nombre, existente.ContratoId,
-                existente.ImporteMensual, existente.Modalidad, existente.MesInicioVigencia, existente.Observaciones);
+            return AResponse(existente, await NombreProyectoAsync(existente.ProyectoId, ct));
         }
-
-        var observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
 
         var condicion = new CondicionEconomica
         {
             ColaboradorId = colaboradorId,
-            ProyectoId = request.ProyectoId.Value,
+            ProyectoId = request.ProyectoId,
             ContratoId = request.ContratoId.Value,
             ImporteMensual = request.ImporteMensual.Value,
             Modalidad = request.Modalidad.Value,
@@ -95,10 +101,15 @@ public class CondicionesEconomicasService(RpsDbContext db)
         db.CondicionesEconomicas.Add(condicion);
         await db.SaveChangesAsync(ct);
 
-        var proyectoNombre = await db.Proyectos.AsNoTracking().Where(p => p.Id == condicion.ProyectoId).Select(p => p.Nombre).FirstAsync(ct);
-
-        return new CondicionEconomicaResponse(
-            condicion.Id, condicion.ColaboradorId, condicion.ProyectoId, proyectoNombre, condicion.ContratoId,
-            condicion.ImporteMensual, condicion.Modalidad, condicion.MesInicioVigencia, condicion.Observaciones);
+        return AResponse(condicion, await NombreProyectoAsync(condicion.ProyectoId, ct));
     }
+
+    private async Task<string?> NombreProyectoAsync(Guid? proyectoId, CancellationToken ct) =>
+        proyectoId is null
+            ? null
+            : await db.Proyectos.AsNoTracking().Where(p => p.Id == proyectoId).Select(p => p.Nombre).FirstOrDefaultAsync(ct);
+
+    private static CondicionEconomicaResponse AResponse(CondicionEconomica c, string? proyectoNombre) => new(
+        c.Id, c.ColaboradorId, c.ProyectoId, proyectoNombre, c.ContratoId,
+        c.ImporteMensual, c.Modalidad, c.MesInicioVigencia, c.Observaciones);
 }

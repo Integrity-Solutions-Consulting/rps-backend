@@ -13,9 +13,6 @@ public static class CondicionEconomicaErrores
     public static Error ContratoNoEncontrado(Guid id) =>
         Error.NoEncontrado("CondicionEconomica.ContratoNoEncontrado", $"No existe un contrato con id '{id}' para ese colaborador y proyecto.");
 
-    public static readonly Error ProyectoRequerido =
-        Error.Validacion("CondicionEconomica.ProyectoRequerido", "proyectoId", "Es obligatorio.");
-
     public static readonly Error ContratoRequerido =
         Error.Validacion("CondicionEconomica.ContratoRequerido", "contratoId", "Es obligatorio.");
 

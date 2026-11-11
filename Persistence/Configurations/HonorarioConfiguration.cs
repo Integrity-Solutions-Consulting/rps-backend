@@ -39,6 +39,14 @@ public class HonorarioConfiguration : IEntityTypeConfiguration<Honorario>
         builder.HasOne<Liquidacion>().WithMany().HasForeignKey(h => h.LiquidacionId).OnDelete(DeleteBehavior.Restrict);
 
         // Hace que generar un período sea idempotente: no se puede duplicar el honorario de un proyecto.
-        builder.HasIndex(h => new { h.ColaboradorId, h.ProyectoId, h.Periodo }).IsUnique();
+        // Por contrato: si un proyecto pasa de un contrato a otro en el mismo mes, cada contrato
+        // paga sus días con su propio honorario.
+        builder.HasIndex(h => new { h.ColaboradorId, h.ProyectoId, h.ContratoId, h.Periodo }).IsUnique();
+
+        // Pago por contrato (sin proyecto): uno por contrato y período.
+        builder.HasIndex(h => new { h.ContratoId, h.Periodo })
+            .IsUnique()
+            .HasFilter("proyecto_id IS NULL")
+            .HasDatabaseName("ix_honorario_por_contrato");
     }
 }

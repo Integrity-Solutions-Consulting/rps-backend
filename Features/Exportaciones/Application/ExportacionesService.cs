@@ -51,11 +51,13 @@ public class ExportacionesService(RpsDbContext db)
 
         var filas = await query
             .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new { h, c })
-            .Join(db.Proyectos.AsNoTracking(), x => x.h.ProyectoId, p => p.Id, (x, p) => new
+            // Left join: el honorario de un contrato que se paga por contrato no tiene proyecto.
+            .GroupJoin(db.Proyectos.AsNoTracking(), x => x.h.ProyectoId, p => (Guid?)p.Id, (x, ps) => new { x.h, x.c, ps })
+            .SelectMany(x => x.ps.DefaultIfEmpty(), (x, p) => new
             {
                 x.h.Periodo, x.h.DiasReales, x.h.DiasReconocidos, x.h.Modalidad,
                 x.h.Subtotal, x.h.Iva, x.h.RetencionFuente, x.h.RetencionIva, x.h.Neto,
-                x.c.TmrColaboradorId, x.c.Nombres, x.c.Apellidos, Proyecto = p.Nombre
+                x.c.TmrColaboradorId, x.c.Nombres, x.c.Apellidos, Proyecto = p != null ? p.Nombre : "Pago por contrato"
             })
             .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId).ThenBy(f => f.Proyecto)
             .ToListAsync(ct);

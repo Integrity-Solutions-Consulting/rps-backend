@@ -13,7 +13,8 @@ public record GenerarHonorariosResponse(int Generados, int Omitidos);
 public record HonorarioResponse(
     Guid Id,
     Guid ColaboradorId,
-    Guid ProyectoId,
+    // Null: honorario de un contrato que se paga por contrato (sin proyecto).
+    Guid? ProyectoId,
     Guid ContratoId,
     DateOnly Periodo,
     int DiasReales,

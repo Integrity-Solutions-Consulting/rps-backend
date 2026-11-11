@@ -974,18 +974,20 @@ namespace rps_backend.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("observaciones");
 
-                    b.Property<Guid>("ProyectoId")
+                    b.Property<Guid?>("ProyectoId")
                         .HasColumnType("uuid")
                         .HasColumnName("proyecto_id");
 
                     b.HasKey("Id")
                         .HasName("pk_condicion_economica");
 
-                    b.HasIndex("ContratoId")
-                        .HasDatabaseName("ix_condicion_economica_contrato_id");
-
                     b.HasIndex("ProyectoId")
                         .HasDatabaseName("ix_condicion_economica_proyecto_id");
+
+                    b.HasIndex("ContratoId", "MesInicioVigencia")
+                        .IsUnique()
+                        .HasDatabaseName("ix_condicion_economica_por_contrato")
+                        .HasFilter("proyecto_id IS NULL");
 
                     b.HasIndex("ColaboradorId", "ProyectoId", "MesInicioVigencia")
                         .IsUnique()
@@ -1063,7 +1065,7 @@ namespace rps_backend.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("proporcional_acordado");
 
-                    b.Property<Guid>("ProyectoId")
+                    b.Property<Guid?>("ProyectoId")
                         .HasColumnType("uuid")
                         .HasColumnName("proyecto_id");
 
@@ -1093,18 +1095,20 @@ namespace rps_backend.Migrations
                     b.HasIndex("CondicionEconomicaId")
                         .HasDatabaseName("ix_honorario_condicion_economica_id");
 
-                    b.HasIndex("ContratoId")
-                        .HasDatabaseName("ix_honorario_contrato_id");
-
                     b.HasIndex("LiquidacionId")
                         .HasDatabaseName("ix_honorario_liquidacion_id");
 
                     b.HasIndex("ProyectoId")
                         .HasDatabaseName("ix_honorario_proyecto_id");
 
-                    b.HasIndex("ColaboradorId", "ProyectoId", "Periodo")
+                    b.HasIndex("ContratoId", "Periodo")
                         .IsUnique()
-                        .HasDatabaseName("ix_honorario_colaborador_id_proyecto_id_periodo");
+                        .HasDatabaseName("ix_honorario_por_contrato")
+                        .HasFilter("proyecto_id IS NULL");
+
+                    b.HasIndex("ColaboradorId", "ProyectoId", "ContratoId", "Periodo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_honorario_colaborador_id_proyecto_id_contrato_id_periodo");
 
                     b.ToTable("honorario", "rps");
                 });
@@ -1585,7 +1589,6 @@ namespace rps_backend.Migrations
                         .WithMany()
                         .HasForeignKey("ProyectoId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_condicion_economica_proyectos_proyecto_id");
                 });
 
@@ -1622,7 +1625,6 @@ namespace rps_backend.Migrations
                         .WithMany()
                         .HasForeignKey("ProyectoId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_honorario_proyectos_proyecto_id");
                 });
 

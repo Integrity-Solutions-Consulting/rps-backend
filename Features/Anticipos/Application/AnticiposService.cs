@@ -214,11 +214,16 @@ public class AnticiposService(RpsDbContext db)
     {
         var mesActual = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
 
-        var condicionesVigentes = (await db.CondicionesEconomicas.AsNoTracking()
-                .Where(c => c.ColaboradorId == colaborador.Id && c.MesInicioVigencia <= mesActual)
-                .ToListAsync(ct))
-            .GroupBy(c => c.ProyectoId)
-            .Select(g => g.OrderByDescending(c => c.MesInicioVigencia).First())
+        // Lo que rige este mes: un solo importe por contrato (pago por contrato) o uno por proyecto.
+        // Solo de contratos vigentes hoy: el de un contrato ya terminado no es parte del neto mensual.
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var contratosVigentes = await ContratosVigentesAsync(colaborador.Id, hoy, ct);
+        var condicionesVigentes = rps_backend.Features.Honorarios.Application.CondicionesVigentes.Seleccionar(
+                await db.CondicionesEconomicas.AsNoTracking()
+                    .Where(c => c.ColaboradorId == colaborador.Id && c.MesInicioVigencia <= mesActual)
+                    .ToListAsync(ct),
+                mesActual)
+            .Where(c => contratosVigentes.Contains(c.ContratoId))
             .ToList();
 
         if (condicionesVigentes.Count == 0)
@@ -230,6 +235,24 @@ public class AnticiposService(RpsDbContext db)
 
         return condicionesVigentes.Sum(c => CalculoTributario.Calcular(
             c.ImporteMensual, c.Modalidad, config.PorcentajeIva, config.PorcentajeRetencionFuente, pctRetencionIva).Neto);
+    }
+
+    // Contratos del colaborador vigentes en la fecha (con adendas; sin fecha de fin = indefinido).
+    private async Task<HashSet<Guid>> ContratosVigentesAsync(Guid colaboradorId, DateOnly fecha, CancellationToken ct)
+    {
+        var contratos = await db.Contratos.AsNoTracking()
+            .Where(c => c.ColaboradorId == colaboradorId && c.FechaInicio <= fecha)
+            .Select(c => new { c.Id, c.FechaFin })
+            .ToListAsync(ct);
+        var ids = contratos.Select(c => c.Id).ToList();
+        var maxAdenda = (await db.Adendas.AsNoTracking().Where(a => ids.Contains(a.ContratoId)).ToListAsync(ct))
+            .GroupBy(a => a.ContratoId)
+            .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
+
+        return contratos
+            .Where(c => c.FechaFin is null || (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin.Value) >= fecha)
+            .Select(c => c.Id)
+            .ToHashSet();
     }
 
     private async Task<AnticipoAdicionalResponse> AResponseAsync(AnticipoAdicional anticipo, CancellationToken ct)

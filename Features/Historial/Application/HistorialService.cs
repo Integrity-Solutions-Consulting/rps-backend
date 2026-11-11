@@ -92,7 +92,9 @@ public class HistorialService(RpsDbContext db)
             .Where(c => c.ColaboradorId == colaboradorId).ToListAsync(ct);
         foreach (var c in condiciones)
         {
-            var proyecto = proyectos.GetValueOrDefault(c.ProyectoId, "Proyecto");
+            var proyecto = c.ProyectoId is { } proyectoId
+                ? proyectos.GetValueOrDefault(proyectoId, "Proyecto")
+                : "pago por contrato";
             var modalidad = c.Modalidad == Modalidad.Neto ? "neto" : "más IVA";
             eventos.Add(new(c.CreadoEn, "Honorario", $"Cambio de honorario · {proyecto}: ${c.ImporteMensual:0.00} {modalidad} desde {PeriodoTexto.Formato(c.MesInicioVigencia)}.",
                 null, PeriodoTexto.Formato(c.MesInicioVigencia), c.ImporteMensual,
