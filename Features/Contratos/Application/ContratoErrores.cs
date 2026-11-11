@@ -38,7 +38,14 @@ public static class ContratoErrores
         Error.Conflicto("Contrato.NoEliminable", "Solo se pueden eliminar contratos que aún no han empezado. Para terminar uno vigente, registra una adenda.");
 
     public static readonly Error ContratoIndefinido =
-        Error.Conflicto("Contrato.Indefinido", "Este contrato es indefinido (sin fecha de fin): no admite adendas.");
+        Error.Conflicto("Contrato.Indefinido", "Este contrato es indefinido (sin fecha de fin): la adenda no lleva fecha de fin.");
+
+    public static readonly Error CambioRequiereAdenda =
+        Error.Conflicto("Contrato.CambioRequiereAdenda",
+            "Ese cambio del contrato se hace con una adenda. Editar solo corrige datos y, si se paga por contrato, permite agregar proyectos.");
+
+    public static readonly Error CambiosInvalidos =
+        Error.Validacion("Contrato.CambiosInvalidos", "cambios", "El resumen de cambios no puede pasar de 1000 caracteres.");
 
     // ===== Validaciones =====
 
@@ -66,5 +73,5 @@ public static class ContratoErrores
         Error.Validacion("Contrato.FechaFueraDeRango", campo, "La fecha debe ser desde el año 2000 y el año de 4 dígitos.");
 
     public static readonly Error NuevaFechaFinInvalida =
-        Error.Validacion("Contrato.NuevaFechaFinInvalida", "nuevaFechaFin", "Es obligatoria y debe ser posterior a la fecha de fin vigente actual.");
+        Error.Validacion("Contrato.NuevaFechaFinInvalida", "nuevaFechaFin", "Es obligatoria y no puede ser anterior a la fecha de fin vigente actual.");
 }

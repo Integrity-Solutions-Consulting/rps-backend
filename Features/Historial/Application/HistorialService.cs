@@ -82,7 +82,9 @@ public class HistorialService(RpsDbContext db)
                 null, PeriodoTexto.Formato(c.FechaInicio), null, "Registrado", enlace));
             var numero = 1;
             foreach (var a in adendas.Where(x => x.ContratoId == c.Id).OrderBy(x => x.CreadoEn))
-                eventos.Add(new(a.CreadoEn, "Adenda", $"Adenda {numero++} en {proyecto}: nuevo fin {a.NuevaFechaFin:yyyy-MM-dd}.",
+                eventos.Add(new(a.CreadoEn, "Adenda",
+                    $"Adenda {numero++} en {proyecto}, desde {a.FechaRegistro:yyyy-MM-dd} hasta {(a.NuevaFechaFin is { } fin ? fin.ToString("yyyy-MM-dd") : "indefinido")}"
+                        + (string.IsNullOrEmpty(a.Cambios) ? "." : $": {a.Cambios}"),
                     null, PeriodoTexto.Formato(a.FechaRegistro), null, "Registrada", enlace));
         }
 
