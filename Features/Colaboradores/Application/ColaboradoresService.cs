@@ -35,7 +35,9 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
             .ThenBy(c => c.CreadoEn)
             .Select(c => new ColaboradorResumenResponse(
                 c.Id, c.TmrColaboradorId, c.Nombres, c.Apellidos, c.Identificacion, c.Correo, c.ActivoEnTmr, c.SincronizadoEn,
-                c.EliminadoEnOrigen, c.Clasificacion, c.EstadoConfiguracion, c.Activo, c.CreadoEn, c.ActualizadoEn))
+                c.EliminadoEnOrigen, c.Clasificacion, c.EstadoConfiguracion, c.Activo, c.CreadoEn, c.ActualizadoEn,
+                c.TipoContratoTmr,
+                c.TipoContratoTmr == TiposContratoTmr.ServiciosProfesionales || c.TipoContratoTmr == TiposContratoTmr.ServiciosJuniors))
             .ToListAsync(ct);
     }
 
@@ -60,6 +62,10 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
         if (!colaborador.Activo)
             return ColaboradorErrores.Desactivado;
+
+        // CON/PAS: la clasificación viene de TMR y la sincronización la volvería a poner.
+        if (TiposContratoTmr.ClasificacionFija(colaborador.TipoContratoTmr) is { } fija && fija != request.Clasificacion)
+            return ColaboradorErrores.ClasificacionLaDefineTmr;
 
         colaborador.Clasificacion = request.Clasificacion;
         await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
@@ -311,7 +317,9 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
             colaborador.CreadoEn,
             colaborador.ActualizadoEn,
             frecuenciaVigente,
-            cuenta is null ? null : ACuentaResponse(cuenta));
+            cuenta is null ? null : ACuentaResponse(cuenta),
+            colaborador.TipoContratoTmr,
+            TiposContratoTmr.ClasificacionFija(colaborador.TipoContratoTmr) is not null);
     }
 
     private CuentaBancariaResponse ACuentaResponse(CuentaBancaria cuenta) =>

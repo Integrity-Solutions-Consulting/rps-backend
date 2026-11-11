@@ -31,7 +31,10 @@ public record ColaboradorResumenResponse(
     EstadoConfiguracion EstadoConfiguracion,
     bool Activo,
     DateTime CreadoEn,
-    DateTime ActualizadoEn);
+    DateTime ActualizadoEn,
+    string? TipoContratoTmr,
+    // true: la clasificación la define TMR (CON/PAS) y no se edita en RPS.
+    bool ClasificacionDesdeTmr);
 
 public record ColaboradorDetalleResponse(
     Guid Id,
@@ -49,7 +52,9 @@ public record ColaboradorDetalleResponse(
     DateTime CreadoEn,
     DateTime ActualizadoEn,
     FrecuenciaResponse? FrecuenciaVigente,
-    CuentaBancariaResponse? CuentaBancaria);
+    CuentaBancariaResponse? CuentaBancaria,
+    string? TipoContratoTmr,
+    bool ClasificacionDesdeTmr);
 
 public record FrecuenciaResponse(Guid Id, Frecuencia Frecuencia, DateOnly VigenteDesdeMes);
 

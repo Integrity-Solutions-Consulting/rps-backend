@@ -53,6 +53,11 @@ public class SincronizacionTmrService(
         if (colaboradores.Count == 0 || proyectos.Count == 0 || asignaciones.Count == 0)
             return SincronizacionTmrErrores.RespuestaVacia;
 
+        // Un TMR sin actualizar no manda el tipo de contrato: se leería como "nadie factura" y se
+        // desactivaría a todos. Si no llega en ningún colaborador, no se toca nada.
+        if (colaboradores.All(c => c.TipoContrato is null))
+            return SincronizacionTmrErrores.SinTipoContrato;
+
         var ahora = DateTime.UtcNow;
 
         await using var transaccion = await db.Database.BeginTransactionAsync(ct);
@@ -63,8 +68,8 @@ public class SincronizacionTmrService(
         var cambios = new List<CambioTmr>();
 
         var (conteoProyectos, proyectoIds) = await SincronizarProyectosAsync(proyectos, ahora, ct);
-        var (conteoColaboradores, colaboradorIds) = await SincronizarColaboradoresAsync(colaboradores, cambios, ahora, ct);
-        var (conteoAsignaciones, omitidas) = await SincronizarAsignacionesAsync(asignaciones, colaboradorIds, proyectoIds, cambios, ahora, ct);
+        var (conteoColaboradores, colaboradorIds, excluidos) = await SincronizarColaboradoresAsync(colaboradores, cambios, ahora, ct);
+        var (conteoAsignaciones, omitidas) = await SincronizarAsignacionesAsync(asignaciones, colaboradorIds, excluidos, proyectoIds, cambios, ahora, ct);
 
         if (esCargaInicial)
             cambios.Clear();
@@ -136,11 +141,13 @@ public class SincronizacionTmrService(
         return (new ConteoSincronizacion(creados, actualizados, marcados), ids);
     }
 
-    private async Task<(ConteoSincronizacion Conteo, Dictionary<int, Guid> Ids)> SincronizarColaboradoresAsync(
+    // Excluidos: ids de TMR que no entran a RPS (no facturan); sus asignaciones se ignoran sin avisar.
+    private async Task<(ConteoSincronizacion Conteo, Dictionary<int, Guid> Ids, HashSet<int> Excluidos)> SincronizarColaboradoresAsync(
         List<TmrColaboradorDto> origen, List<CambioTmr> cambios, DateTime ahora, CancellationToken ct)
     {
         var existentes = await db.ColaboradoresRps.ToDictionaryAsync(c => c.TmrColaboradorId, ct);
 
+        var excluidos = new HashSet<int>();
         var ids = new Dictionary<int, Guid>();
         var vistos = new HashSet<string>();
         int creados = 0, actualizados = 0, marcados = 0;
@@ -154,7 +161,17 @@ public class SincronizacionTmrService(
             var identificacion = dto.Identificacion?.Trim();
             var correo = dto.Correo?.Trim();
 
+            // RPS es para quienes facturan (servicios profesionales, juniors, medio tiempo, consultor
+            // externo). Un afiliado o alguien sin tipo de contrato no entra; si ya estaba en RPS se
+            // queda (con su historial, RN 07) pero inactivo.
+            var factura = TiposContratoTmr.Factura(dto.TipoContrato);
             var esNuevo = !existentes.TryGetValue(clave, out var colaborador);
+            if (esNuevo && !factura)
+            {
+                excluidos.Add(dto.Id);
+                continue;
+            }
+
             if (esNuevo)
             {
                 // Nace Pendiente aunque aún no tenga contratos ni honorarios (RN 06), y con el
@@ -165,12 +182,31 @@ public class SincronizacionTmrService(
             }
             else if (colaborador!.Nombres != nombres || colaborador.Apellidos != apellidos
                 || colaborador.Identificacion != identificacion || colaborador.Correo != correo
-                || colaborador.ActivoEnTmr != dto.Activo || colaborador.EliminadoEnOrigen)
+                || colaborador.ActivoEnTmr != dto.Activo || colaborador.EliminadoEnOrigen
+                || colaborador.TipoContratoTmr != dto.TipoContrato)
             {
                 colaborador.ActualizadoEn = ahora;
                 actualizados++;
             }
             var cambioEstadoEnTmr = colaborador!.ActivoEnTmr != dto.Activo;
+            var cambioTipoContrato = colaborador.TipoContratoTmr != dto.TipoContrato;
+
+            // Sin tipo anterior (primera sincronización con este dato) no se avisa: no es un cambio en TMR.
+            var avisoTipo = !esNuevo && cambioTipoContrato && colaborador.TipoContratoTmr is not null;
+            if (avisoTipo)
+                cambios.Add(NuevoCambio(TipoCambioTmr.TipoContrato, colaborador.Id, null,
+                    TiposContratoTmr.Describir(colaborador.TipoContratoTmr), TiposContratoTmr.Describir(dto.TipoContrato), null, ahora));
+            colaborador.TipoContratoTmr = dto.TipoContrato;
+
+            // CON/PAS fijan Profesional/Junior (cambia la retención de IVA). MT/COS: la elige Contabilidad.
+            if (TiposContratoTmr.ClasificacionFija(dto.TipoContrato) is { } fija && colaborador.Clasificacion != fija)
+            {
+                if (!esNuevo && !avisoTipo && colaborador.Clasificacion is { } elegida)
+                    cambios.Add(NuevoCambio(TipoCambioTmr.TipoContrato, colaborador.Id, null,
+                        $"{elegida} (elegido en RPS)", $"{fija} (según TMR)", null, ahora));
+                colaborador.Clasificacion = fija;
+                await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
+            }
 
             if (colaborador.ActivoEnTmr is bool activoAnterior && activoAnterior != dto.Activo)
                 cambios.Add(NuevoCambio(TipoCambioTmr.EstadoColaborador, colaborador.Id, null,
@@ -187,8 +223,9 @@ public class SincronizacionTmrService(
             colaborador.EliminadoEnOrigen = false;
             colaborador.SincronizadoEn = ahora;
 
+            // Activo en RPS = activo en TMR y con un tipo de contrato que factura.
             if (!esNuevo)
-                await AplicarEstadoDeTmrAsync(colaborador, dto.Activo, cambioEstadoEnTmr, cambios, ahora, ct);
+                await AplicarEstadoDeTmrAsync(colaborador, dto.Activo && factura, cambioEstadoEnTmr || cambioTipoContrato, cambios, ahora, ct);
 
             ids[dto.Id] = colaborador.Id;
         }
@@ -205,12 +242,12 @@ public class SincronizacionTmrService(
             }
         }
 
-        return (new ConteoSincronizacion(creados, actualizados, marcados), ids);
+        return (new ConteoSincronizacion(creados, actualizados, marcados), ids, excluidos);
     }
 
     private async Task<(ConteoSincronizacion Conteo, List<AsignacionOmitida> Omitidas)> SincronizarAsignacionesAsync(
-        List<TmrAsignacionDto> origen, Dictionary<int, Guid> colaboradorIds, Dictionary<int, Guid> proyectoIds,
-        List<CambioTmr> cambios, DateTime ahora, CancellationToken ct)
+        List<TmrAsignacionDto> origen, Dictionary<int, Guid> colaboradorIds, HashSet<int> colaboradoresExcluidos,
+        Dictionary<int, Guid> proyectoIds, List<CambioTmr> cambios, DateTime ahora, CancellationToken ct)
     {
         var omitidas = new List<AsignacionOmitida>();
         // Fila inválida con inicio conocido: la asignación que RPS ya tenga se deja como está hasta corregir TMR.
@@ -220,6 +257,10 @@ public class SincronizacionTmrService(
 
         foreach (var dto in origen)
         {
+            // No factura (afiliado o sin tipo de contrato): no está en RPS a propósito, no es un error.
+            if (colaboradoresExcluidos.Contains(dto.IdEmpleado))
+                continue;
+
             if (!colaboradorIds.TryGetValue(dto.IdEmpleado, out var colaboradorId))
             {
                 omitidas.Add(new AsignacionOmitida(dto.IdEmpleado, dto.IdProyecto, "El colaborador no llegó en la lista de TMR."));

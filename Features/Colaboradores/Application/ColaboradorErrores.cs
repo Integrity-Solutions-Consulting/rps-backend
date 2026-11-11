@@ -29,6 +29,11 @@ public static class ColaboradorErrores
             "Colaborador.CuentaBancariaConflicto",
             "No se pudo registrar la cuenta bancaria por una modificación concurrente. Intenta de nuevo.");
 
+    public static readonly Error ClasificacionLaDefineTmr =
+        Error.Conflicto(
+            "Colaborador.ClasificacionLaDefineTmr",
+            "El tipo de servicio de este colaborador sale de su tipo de contrato en TMR (Servicios profesionales o Juniors): cámbialo allí.");
+
     public static readonly Error EstadoLoManejaTmr =
         Error.Conflicto(
             "Colaborador.EstadoLoManejaTmr",
