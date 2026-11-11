@@ -709,6 +709,11 @@ namespace rps_backend.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("Cambios")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("cambios");
+
                     b.Property<Guid>("ContratoId")
                         .HasColumnType("uuid")
                         .HasColumnName("contrato_id");
@@ -721,7 +726,7 @@ namespace rps_backend.Migrations
                         .HasColumnType("date")
                         .HasColumnName("fecha_registro");
 
-                    b.Property<DateOnly>("NuevaFechaFin")
+                    b.Property<DateOnly?>("NuevaFechaFin")
                         .HasColumnType("date")
                         .HasColumnName("nueva_fecha_fin");
 

@@ -15,6 +15,9 @@ public class AdendaConfiguration : IEntityTypeConfiguration<Adenda>
         builder.Property(a => a.Observaciones)
             .HasMaxLength(500);
 
+        builder.Property(a => a.Cambios)
+            .HasMaxLength(1000);
+
         builder.HasOne<Contrato>()
             .WithMany()
             .HasForeignKey(a => a.ContratoId)
