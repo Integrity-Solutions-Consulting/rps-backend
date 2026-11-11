@@ -11,7 +11,10 @@ public enum TipoCambioTmr
     ColaboradorRestaurado,
     // Inactivo en TMR pero sigue activo en RPS porque tiene un anticipo adicional con saldo por
     // recuperar. Se desactiva solo en la sincronización siguiente a que el saldo llegue a cero.
-    DesactivacionRetenida
+    DesactivacionRetenida,
+    // Cambió el tipo de contrato en TMR: puede cambiar la clasificación (retención de IVA) o, si
+    // pasa a uno que no factura (afiliado), dejar al colaborador inactivo en RPS.
+    TipoContrato
 }
 
 // Aviso de un cambio relevante detectado en TMR (RN 50). No modifica liquidaciones: queda visible hasta

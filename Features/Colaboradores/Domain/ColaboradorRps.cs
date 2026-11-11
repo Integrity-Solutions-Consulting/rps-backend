@@ -23,6 +23,10 @@ public class ColaboradorRps
 
     public bool EliminadoEnOrigen { get; set; }
 
+    // Código del tipo de contrato en TMR (catálogo TCT). Ver TiposContratoTmr.
+    public string? TipoContratoTmr { get; set; }
+
+    // CON/PAS: la fija la sincronización desde TMR. MT/COS: la elige Contabilidad en RPS.
     public Clasificacion? Clasificacion { get; set; }
 
     public EstadoConfiguracion EstadoConfiguracion { get; set; } = EstadoConfiguracion.Pendiente;

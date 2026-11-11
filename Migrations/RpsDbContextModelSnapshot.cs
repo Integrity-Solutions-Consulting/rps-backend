@@ -534,6 +534,11 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sincronizado_en");
 
+                    b.Property<string>("TipoContratoTmr")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo_contrato_tmr");
+
                     b.Property<string>("TmrColaboradorId")
                         .IsRequired()
                         .HasMaxLength(50)

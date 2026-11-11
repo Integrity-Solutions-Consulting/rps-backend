@@ -39,6 +39,9 @@ public class ColaboradorRpsConfiguration : IEntityTypeConfiguration<ColaboradorR
             .HasConversion<string>()
             .HasMaxLength(20);
 
+        builder.Property(c => c.TipoContratoTmr)
+            .HasMaxLength(20);
+
         builder.Property(c => c.EstadoConfiguracion)
             .HasConversion<string>()
             .HasMaxLength(20)
