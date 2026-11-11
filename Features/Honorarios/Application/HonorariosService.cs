@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using rps_backend.Features.Colaboradores.Application;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Proyectos.Domain;
 using rps_backend.Persistence;
@@ -18,6 +19,10 @@ public class HonorariosService(RpsDbContext db)
 
         var finPeriodo = periodo.AddMonths(1).AddDays(-1);
         var diasReales = finPeriodo.Day;
+
+        // Por si el recálculo diario todavía no corrió hoy: el estado debe estar al día antes de
+        // decidir a quién se le calcula el honorario.
+        await ColaboradorEstado.RecalcularTodosAsync(db, ct);
 
         var colaboradores = await db.ColaboradoresRps.AsNoTracking()
             .Where(c => c.Activo && c.EstadoConfiguracion == EstadoConfiguracion.Configurado)

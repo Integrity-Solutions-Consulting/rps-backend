@@ -136,12 +136,12 @@ builder.Services.AddScoped<CambiosTmrService>();
 
 var sincronizacionTmr = builder.Configuration.GetSection("Tmr:Sincronizacion").Get<SincronizacionTmrOpciones>() ?? new SincronizacionTmrOpciones();
 builder.Services.AddSingleton(sincronizacionTmr);
-if (sincronizacionTmr.Habilitada)
-{
-    if (sincronizacionTmr.IntervaloMinutos < 1)
-        throw new InvalidOperationException("Tmr:Sincronizacion:IntervaloMinutos debe ser de al menos 1 minuto.");
+if (sincronizacionTmr.Habilitada && sincronizacionTmr.IntervaloMinutos < 1)
+    throw new InvalidOperationException("Tmr:Sincronizacion:IntervaloMinutos debe ser de al menos 1 minuto.");
 
-    builder.Services.AddQuartz(q =>
+builder.Services.AddQuartz(q =>
+{
+    if (sincronizacionTmr.Habilitada)
     {
         var jobKey = new JobKey(nameof(SincronizacionTmrJob));
         q.AddJob<SincronizacionTmrJob>(j => j.WithIdentity(jobKey));
@@ -153,9 +153,18 @@ if (sincronizacionTmr.Habilitada)
                 .WithInterval(TimeSpan.FromMinutes(sincronizacionTmr.IntervaloMinutos))
                 .RepeatForever()
                 .WithMisfireInstruction(SimpleTriggerMisfireInstruction.NextWithRemainingCount)));
-    });
-    builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
-}
+    }
+
+    // Estado Configurado/Pendiente: al arrancar y todos los días a las 05:05 UTC (00:05 en Ecuador),
+    // cuando ya cambió la fecha con la que se evalúan contratos y frecuencias.
+    var recalculoKey = new JobKey(nameof(RecalculoEstadoJob));
+    q.AddJob<RecalculoEstadoJob>(j => j.WithIdentity(recalculoKey));
+    q.AddTrigger(t => t.ForJob(recalculoKey).StartNow());
+    q.AddTrigger(t => t
+        .ForJob(recalculoKey)
+        .WithCronSchedule("0 5 5 * * ?", c => c.InTimeZone(TimeZoneInfo.Utc)));
+});
+builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
 // Historial del colaborador: solo lee lo que guardan los demás módulos.
 builder.Services.AddScoped<HistorialService>();
 
