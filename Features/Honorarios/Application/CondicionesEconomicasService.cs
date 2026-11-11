@@ -54,9 +54,30 @@ public class CondicionesEconomicasService(RpsDbContext db)
         if (!contratoValido)
             return CondicionEconomicaErrores.ContratoNoEncontrado(request.ContratoId.Value);
 
-        if (await db.CondicionesEconomicas.AnyAsync(c =>
-                c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId && c.MesInicioVigencia == mesInicioVigencia, ct))
-            return CondicionEconomicaErrores.MesInicioVigenciaDuplicado(mesInicioVigencia);
+        var existente = await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
+            c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId && c.MesInicioVigencia == mesInicioVigencia, ct);
+        if (existente is not null)
+        {
+            if (!request.Reemplazar)
+                return CondicionEconomicaErrores.MesInicioVigenciaDuplicado(mesInicioVigencia);
+
+            // Un honorario ya generado guarda el importe calculado con esta condición: cambiarla por
+            // debajo dejaría ese cálculo desalineado. Primero hay que eliminar el cálculo.
+            if (await db.Honorarios.AnyAsync(h => h.CondicionEconomicaId == existente.Id, ct))
+                return CondicionEconomicaErrores.YaUsadaEnHonorarios(mesInicioVigencia);
+
+            existente.ContratoId = request.ContratoId.Value;
+            existente.ImporteMensual = request.ImporteMensual.Value;
+            existente.Modalidad = request.Modalidad.Value;
+            if (request.Observaciones is not null)
+                existente.Observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
+            await db.SaveChangesAsync(ct);
+
+            var nombre = await db.Proyectos.AsNoTracking().Where(p => p.Id == existente.ProyectoId).Select(p => p.Nombre).FirstAsync(ct);
+            return new CondicionEconomicaResponse(
+                existente.Id, existente.ColaboradorId, existente.ProyectoId, nombre, existente.ContratoId,
+                existente.ImporteMensual, existente.Modalidad, existente.MesInicioVigencia, existente.Observaciones);
+        }
 
         var observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
 

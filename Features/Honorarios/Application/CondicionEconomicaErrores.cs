@@ -28,6 +28,10 @@ public static class CondicionEconomicaErrores
     public static readonly Error MesInicioVigenciaInvalido =
         Error.Validacion("CondicionEconomica.MesInicioVigenciaInvalido", "mesInicioVigencia", "Es obligatorio y debe ser el primer día del mes.");
 
+    public static Error YaUsadaEnHonorarios(DateOnly mes) =>
+        Error.Conflicto("CondicionEconomica.YaUsadaEnHonorarios",
+            $"El honorario vigente desde {mes:MM/yyyy} ya se usó en un cálculo de honorarios generado. Elimina ese cálculo (si aún no está liquidado) para poder cambiarlo.");
+
     public static Error MesInicioVigenciaDuplicado(DateOnly mes) =>
         Error.Conflicto("CondicionEconomica.MesInicioVigenciaDuplicado", $"Ya existe una condición económica de ese proyecto vigente desde {mes:yyyy-MM-dd}.");
 }

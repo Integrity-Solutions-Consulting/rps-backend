@@ -11,6 +11,37 @@ public static class ColaboradorEstado
     // Consulta la base, así que se llama después de guardar los cambios de frecuencia/cuenta/contrato.
     public static async Task RecalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
     {
+        colaborador.EstadoConfiguracion = await CalcularAsync(colaborador, db, ct);
+        colaborador.ActualizadoEn = DateTime.UtcNow;
+    }
+
+    // El estado depende de la fecha (un contrato vence, una frecuencia programada entra en
+    // vigencia), no solo de las ediciones: esto lo pone al día para todos. Solo toca a los que
+    // cambian, para no ensuciar ActualizadoEn ni la auditoría. Guarda los cambios y devuelve cuántos.
+    public static async Task<int> RecalcularTodosAsync(RpsDbContext db, CancellationToken ct)
+    {
+        var colaboradores = await db.ColaboradoresRps.ToListAsync(ct);
+        var cambiados = 0;
+
+        foreach (var colaborador in colaboradores)
+        {
+            var estado = await CalcularAsync(colaborador, db, ct);
+            if (estado == colaborador.EstadoConfiguracion)
+                continue;
+
+            colaborador.EstadoConfiguracion = estado;
+            colaborador.ActualizadoEn = DateTime.UtcNow;
+            cambiados++;
+        }
+
+        if (cambiados > 0)
+            await db.SaveChangesAsync(ct);
+
+        return cambiados;
+    }
+
+    private static async Task<EstadoConfiguracion> CalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
+    {
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
         var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
 
@@ -49,11 +80,8 @@ public static class ColaboradorEstado
             });
         }
 
-        colaborador.EstadoConfiguracion =
-            colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva && tieneContratoVigente
-                ? EstadoConfiguracion.Configurado
-                : EstadoConfiguracion.Pendiente;
-
-        colaborador.ActualizadoEn = DateTime.UtcNow;
+        return colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva && tieneContratoVigente
+            ? EstadoConfiguracion.Configurado
+            : EstadoConfiguracion.Pendiente;
     }
 }
