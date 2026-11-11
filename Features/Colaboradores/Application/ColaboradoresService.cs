@@ -69,29 +69,20 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
     }
 
     // Desactivar no borra nada: el colaborador y su historial se conservan y se puede volver a activar.
+    // Solo para colaboradores que no vienen de TMR: en los sincronizados el estado lo manda TMR.
     public async Task<Resultado<ColaboradorDetalleResponse>> CambiarActivoAsync(Guid id, bool activo, CancellationToken ct)
     {
         var colaborador = await db.ColaboradoresRps.FirstOrDefaultAsync(c => c.Id == id, ct);
         if (colaborador is null)
             return ColaboradorErrores.NoEncontrado(id);
 
+        if (colaborador.SincronizadoEn is not null && colaborador.Activo != activo)
+            return ColaboradorErrores.EstadoLoManejaTmr;
+
         if (colaborador.Activo != activo)
         {
-            // Un anticipo adicional con saldo pendiente de un colaborador inactivo nunca se
-            // recupera (HonorariosService.GenerarAsync solo considera colaboradores activos, por
-            // lo que nunca se genera la Liquidación/Corte que aplicaría su cuota): desactivar lo
-            // dejaría varado para siempre.
-            if (!activo)
-            {
-                var anticipoIds = await db.AnticiposAdicionales.Where(a => a.ColaboradorId == id).Select(a => a.Id).ToListAsync(ct);
-                if (anticipoIds.Count > 0)
-                {
-                    var montoTotal = await db.AnticiposAdicionales.Where(a => anticipoIds.Contains(a.Id)).SumAsync(a => a.Monto, ct);
-                    var cuotasAplicadas = await db.CuotasRecuperacion.Where(c => anticipoIds.Contains(c.AnticipoAdicionalId)).SumAsync(c => c.Importe, ct);
-                    if (montoTotal - cuotasAplicadas > 0)
-                        return ColaboradorErrores.TieneAnticiposConSaldoPendiente;
-                }
-            }
+            if (!activo && await ColaboradorAnticipos.TieneSaldoPendienteAsync(db, id, ct))
+                return ColaboradorErrores.TieneAnticiposConSaldoPendiente;
 
             colaborador.Activo = activo;
             colaborador.ActualizadoEn = DateTime.UtcNow;

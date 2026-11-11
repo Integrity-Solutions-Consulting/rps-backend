@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using rps_backend.Features.Colaboradores.Application;
 using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.IntegracionTmr.Domain;
 using rps_backend.Features.Proyectos.Domain;
@@ -153,20 +154,23 @@ public class SincronizacionTmrService(
             var identificacion = dto.Identificacion?.Trim();
             var correo = dto.Correo?.Trim();
 
-            if (!existentes.TryGetValue(clave, out var colaborador))
+            var esNuevo = !existentes.TryGetValue(clave, out var colaborador);
+            if (esNuevo)
             {
-                // Nace Pendiente aunque aún no tenga contratos ni honorarios (RN 06).
-                colaborador = new ColaboradorRps { TmrColaboradorId = clave };
+                // Nace Pendiente aunque aún no tenga contratos ni honorarios (RN 06), y con el
+                // mismo estado activo/inactivo que tiene en TMR.
+                colaborador = new ColaboradorRps { TmrColaboradorId = clave, Activo = dto.Activo };
                 db.ColaboradoresRps.Add(colaborador);
                 creados++;
             }
-            else if (colaborador.Nombres != nombres || colaborador.Apellidos != apellidos
+            else if (colaborador!.Nombres != nombres || colaborador.Apellidos != apellidos
                 || colaborador.Identificacion != identificacion || colaborador.Correo != correo
                 || colaborador.ActivoEnTmr != dto.Activo || colaborador.EliminadoEnOrigen)
             {
                 colaborador.ActualizadoEn = ahora;
                 actualizados++;
             }
+            var cambioEstadoEnTmr = colaborador!.ActivoEnTmr != dto.Activo;
 
             if (colaborador.ActivoEnTmr is bool activoAnterior && activoAnterior != dto.Activo)
                 cambios.Add(NuevoCambio(TipoCambioTmr.EstadoColaborador, colaborador.Id, null,
@@ -175,7 +179,6 @@ public class SincronizacionTmrService(
             if (colaborador.EliminadoEnOrigen)
                 cambios.Add(NuevoCambio(TipoCambioTmr.ColaboradorRestaurado, colaborador.Id, null, null, null, null, ahora));
 
-            // Activo no se toca: lo administra Contabilidad en RPS. El estado de TMR va en ActivoEnTmr.
             colaborador.Nombres = nombres;
             colaborador.Apellidos = apellidos;
             colaborador.Identificacion = identificacion;
@@ -183,6 +186,9 @@ public class SincronizacionTmrService(
             colaborador.ActivoEnTmr = dto.Activo;
             colaborador.EliminadoEnOrigen = false;
             colaborador.SincronizadoEn = ahora;
+
+            if (!esNuevo)
+                await AplicarEstadoDeTmrAsync(colaborador, dto.Activo, cambioEstadoEnTmr, cambios, ahora, ct);
 
             ids[dto.Id] = colaborador.Id;
         }
@@ -328,6 +334,30 @@ public class SincronizacionTmrService(
         }
 
         return (new ConteoSincronizacion(creadas, actualizadas, marcadas), omitidas);
+    }
+
+    // TMR manda sobre el estado activo/inactivo de RPS. La reactivación es inmediata (el aviso
+    // EstadoColaborador ya queda para que Contabilidad lo revise). La desactivación espera si el
+    // colaborador tiene un anticipo adicional con saldo por recuperar: se avisa una vez y se
+    // desactiva en la sincronización siguiente a que el saldo llegue a cero.
+    private async Task AplicarEstadoDeTmrAsync(
+        ColaboradorRps colaborador, bool activoEnTmr, bool cambioEstadoEnTmr, List<CambioTmr> cambios, DateTime ahora, CancellationToken ct)
+    {
+        if (colaborador.Activo == activoEnTmr)
+            return;
+
+        if (!activoEnTmr && await ColaboradorAnticipos.TieneSaldoPendienteAsync(db, colaborador.Id, ct))
+        {
+            var yaAvisado = await db.CambiosTmr.AnyAsync(
+                c => c.ColaboradorId == colaborador.Id && c.Tipo == TipoCambioTmr.DesactivacionRetenida, ct);
+            if (cambioEstadoEnTmr || !yaAvisado)
+                cambios.Add(NuevoCambio(TipoCambioTmr.DesactivacionRetenida, colaborador.Id, null,
+                    "Inactivo en TMR", "Activo en RPS hasta recuperar el anticipo", null, ahora));
+            return;
+        }
+
+        colaborador.Activo = activoEnTmr;
+        colaborador.ActualizadoEn = ahora;
     }
 
     private static CambioTmr NuevoCambio(

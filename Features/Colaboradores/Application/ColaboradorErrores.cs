@@ -29,6 +29,11 @@ public static class ColaboradorErrores
             "Colaborador.CuentaBancariaConflicto",
             "No se pudo registrar la cuenta bancaria por una modificación concurrente. Intenta de nuevo.");
 
+    public static readonly Error EstadoLoManejaTmr =
+        Error.Conflicto(
+            "Colaborador.EstadoLoManejaTmr",
+            "El estado activo/inactivo de este colaborador lo define TMR: cámbialo allí y se reflejará en la próxima sincronización.");
+
     public static readonly Error TieneAnticiposConSaldoPendiente =
         Error.Conflicto(
             "Colaborador.TieneAnticiposConSaldoPendiente",

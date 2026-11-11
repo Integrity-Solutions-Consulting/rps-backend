@@ -40,23 +40,37 @@ public static class ColaboradorEstado
         return cambiados;
     }
 
-    private static async Task<EstadoConfiguracion> CalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
+    private static Task<EstadoConfiguracion> CalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
     {
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
+        return CalcularEntreAsync(colaborador, db, hoy, hoy, ct);
+    }
+
+    // Configurado para un período ya transcurrido o en curso (cálculo de honorarios): no el estado
+    // de hoy, sino si en ese mes tenía todo. Así quien salió a mitad de mes, con un contrato que
+    // terminó ese mismo mes, igual entra al cálculo de los días que trabajó.
+    public static Task<EstadoConfiguracion> CalcularParaPeriodoAsync(
+        ColaboradorRps colaborador, RpsDbContext db, DateOnly periodo, CancellationToken ct) =>
+        CalcularEntreAsync(colaborador, db, periodo, periodo.AddMonths(1).AddDays(-1), ct);
+
+    // Contrato vigente en algún día de [desde, hasta]; frecuencia que ya rige en el mes de "desde".
+    private static async Task<EstadoConfiguracion> CalcularEntreAsync(
+        ColaboradorRps colaborador, RpsDbContext db, DateOnly desde, DateOnly hasta, CancellationToken ct)
+    {
+        var mes = new DateOnly(desde.Year, desde.Month, 1);
 
         // Vigente, no "alguna vez registrada": una frecuencia con VigenteDesdeMes futuro no
         // cuenta todavía (mismo criterio que ColaboradoresService.ConstruirDetalleAsync).
         var tieneFrecuencia = await db.ColaboradoresFrecuencia
-            .AnyAsync(f => f.ColaboradorId == colaborador.Id && f.VigenteDesdeMes <= mesActual, ct);
+            .AnyAsync(f => f.ColaboradorId == colaborador.Id && f.VigenteDesdeMes <= mes, ct);
 
         var tieneCuentaActiva = await db.CuentasBancarias
             .AnyAsync(c => c.ColaboradorId == colaborador.Id && c.Activa, ct);
 
         // Considera adendas: un contrato cuya FechaFin original ya pasó sigue vigente si una
-        // adenda extendió su fecha fin más allá de hoy (RN 10-12).
+        // adenda extendió su fecha fin (RN 10-12).
         var contratosIniciados = await db.Contratos
-            .Where(c => c.ColaboradorId == colaborador.Id && c.FechaInicio <= hoy)
+            .Where(c => c.ColaboradorId == colaborador.Id && c.FechaInicio <= hasta)
             .Select(c => new { c.Id, c.FechaFin })
             .ToListAsync(ct);
 
@@ -76,7 +90,7 @@ public static class ColaboradorEstado
                 if (c.FechaFin is null) return true;
                 var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
                 var fechaFinVigente = maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin.Value;
-                return fechaFinVigente >= hoy;
+                return fechaFinVigente >= desde;
             });
         }
 
