@@ -1,66 +1,46 @@
 using System.Globalization;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Persistence;
 using rps_backend.Shared;
 
 namespace rps_backend.Features.Exportaciones.Application;
 
-// Exportaciones de solo lectura (CSV y PDF de liquidaciones, honorarios y colaboradores). No hay forma de fallar: sin Resultado<T>.
-// Todo número/fecha se formatea con InvariantCulture: el locale del servidor usa coma decimal,
-// y una coma rompería las columnas del CSV.
+// Exportaciones de solo lectura en Excel y PDF (liquidaciones, honorarios y colaboradores).
+// No hay forma de fallar: sin Resultado<T>.
 public class ExportacionesService(RpsDbContext db)
 {
+    // Excel de honorarios: una fila por honorario (proyecto, o el contrato si se paga por contrato).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosAsync(DateOnly? periodo, CancellationToken ct)
     {
-        var query = db.Honorarios.AsNoTracking().AsQueryable();
-        if (periodo is not null)
-            query = query.Where(h => h.Periodo == periodo);
+        var filas = await FilasHonorariosAsync(periodo, ct);
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
 
-        var filas = await query
-            .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new
+        var hoja = new HojaExcel(
+            "Honorarios", "Honorarios por proyecto",
+            $"{(periodo is { } mes ? ReportesPdf.NombreMes(mes) : "Todos los períodos")} · {filas.Count} honorarios · Moneda {config.Moneda}",
+            ["Colaborador", "Identificación", "Proyecto", "Período", "Modalidad", "Días reconocidos", "Días del mes",
+             "Proporcional acordado", "Subtotal", "IVA", "Total del documento", "Retención en la fuente", "Retención de IVA",
+             "Total de retenciones", "Neto"],
+            filas.Select(f => new object?[]
             {
-                h.Id, h.ColaboradorId, c.TmrColaboradorId, h.ProyectoId, h.Periodo, h.Modalidad,
-                h.DiasReales, h.DiasReconocidos, h.Subtotal, h.Iva, h.RetencionFuente, h.RetencionIva, h.Neto
-            })
-            .OrderBy(f => f.Periodo).ThenBy(f => f.TmrColaboradorId)
-            .ToListAsync(ct);
+                NombreColaborador(f.Nombres, f.Apellidos, f.TmrColaboradorId), f.Identificacion, f.Proyecto, ReportesPdf.NombreMes(f.Periodo),
+                f.Modalidad == Modalidad.MasIva ? "Más IVA" : "Neto", f.DiasReconocidos, f.DiasReales,
+                f.ProporcionalAcordado, f.Subtotal, f.Iva, f.TotalDocumento, f.RetencionFuente, f.RetencionIva, f.TotalRetenciones, f.Neto
+            }).ToList(),
+            ["Totales", null, null, null, null, null, null,
+             filas.Sum(f => f.ProporcionalAcordado), filas.Sum(f => f.Subtotal), filas.Sum(f => f.Iva), filas.Sum(f => f.TotalDocumento),
+             filas.Sum(f => f.RetencionFuente), filas.Sum(f => f.RetencionIva), filas.Sum(f => f.TotalRetenciones), filas.Sum(f => f.Neto)],
+            "No hay honorarios calculados para este período.");
 
-        var encabezados = new[]
-        {
-            "id", "colaborador_id", "tmr_colaborador_id", "proyecto_id", "periodo", "modalidad",
-            "dias_reales", "dias_reconocidos", "subtotal", "iva", "retencion_fuente", "retencion_iva", "neto"
-        };
-        var contenido = ConstruirCsv(encabezados, filas.Select(f => new[]
-        {
-            f.Id.ToString(), f.ColaboradorId.ToString(), f.TmrColaboradorId, f.ProyectoId.ToString(), FormatFecha(f.Periodo), f.Modalidad.ToString(),
-            f.DiasReales.ToString(CultureInfo.InvariantCulture), f.DiasReconocidos.ToString(CultureInfo.InvariantCulture),
-            FormatMonto(f.Subtotal), FormatMonto(f.Iva), FormatMonto(f.RetencionFuente), FormatMonto(f.RetencionIva), FormatMonto(f.Neto)
-        }));
-
-        var nombreArchivo = periodo is null ? "honorarios_todos.csv" : $"honorarios_{periodo:yyyy-MM}.csv";
+        var contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [hoja]);
+        var nombreArchivo = periodo is null ? "honorarios_todos.xlsx" : $"honorarios_{periodo:yyyy-MM}.xlsx";
         return (contenido, nombreArchivo);
     }
 
-    // PDF de honorarios: mismo filtro que el CSV, con nombres de colaborador y proyecto y totales.
+    // PDF de honorarios: mismos datos que el Excel, con totales.
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosPdfAsync(DateOnly? periodo, CancellationToken ct)
     {
-        var query = db.Honorarios.AsNoTracking().AsQueryable();
-        if (periodo is not null)
-            query = query.Where(h => h.Periodo == periodo);
-
-        var filas = await query
-            .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new { h, c })
-            // Left join: el honorario de un contrato que se paga por contrato no tiene proyecto.
-            .GroupJoin(db.Proyectos.AsNoTracking(), x => x.h.ProyectoId, p => (Guid?)p.Id, (x, ps) => new { x.h, x.c, ps })
-            .SelectMany(x => x.ps.DefaultIfEmpty(), (x, p) => new
-            {
-                x.h.Periodo, x.h.DiasReales, x.h.DiasReconocidos, x.h.Modalidad,
-                x.h.Subtotal, x.h.Iva, x.h.RetencionFuente, x.h.RetencionIva, x.h.Neto,
-                x.c.TmrColaboradorId, x.c.Nombres, x.c.Apellidos, Proyecto = p != null ? p.Nombre : "Pago por contrato"
-            })
-            .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId).ThenBy(f => f.Proyecto)
-            .ToListAsync(ct);
+        var filas = await FilasHonorariosAsync(periodo, ct);
 
         var todos = periodo is null;
         var columnas = new List<ColumnaPdf> { new("Colaborador", 3), new("Proyecto", 2.6f) };
@@ -103,33 +83,167 @@ public class ExportacionesService(RpsDbContext db)
         return (contenido, nombreArchivo);
     }
 
+    // Excel de liquidaciones con toda la información: resumen por colaborador, detalle de cada
+    // honorario (proporcional, impuestos y retenciones) y cortes (base, cuotas de anticipos, preparado).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesAsync(DateOnly? periodo, CancellationToken ct)
     {
-        var query = db.Liquidaciones.AsNoTracking().AsQueryable();
-        if (periodo is not null)
-            query = query.Where(l => l.Periodo == periodo);
+        var liquidaciones = await FilasLiquidacionesAsync(periodo, ct);
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var subtitulo = $"{(periodo is { } mes ? ReportesPdf.NombreMes(mes) : "Todos los períodos")} · {liquidaciones.Count} liquidaciones · Moneda {config.Moneda}";
 
-        var filas = await query
-            .Join(db.ColaboradoresRps.AsNoTracking(), l => l.ColaboradorId, c => c.Id, (l, c) => new
+        var resumen = new HojaExcel(
+            "Resumen", "Liquidaciones de honorarios", subtitulo,
+            ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
+             "Cuotas de anticipos", "A pagar", "Revisada"],
+            liquidaciones.Select(l => new object?[]
             {
-                l.Id, l.ColaboradorId, c.TmrColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado
-            })
-            .OrderBy(f => f.Periodo).ThenBy(f => f.TmrColaboradorId)
-            .ToListAsync(ct);
+                l.Colaborador, l.Identificacion, l.Clasificacion ?? "Sin clasificar", ReportesPdf.NombreMes(l.Periodo),
+                l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.APagar, l.Revisado ? "Sí" : "Pendiente"
+            }).ToList(),
+            ["Totales", null, null, null, liquidaciones.Sum(l => l.NetoConsolidado), liquidaciones.Sum(l => l.Quincena),
+             liquidaciones.Sum(l => l.FinDeMes), liquidaciones.Sum(l => l.RecuperacionAnticipos), liquidaciones.Sum(l => l.APagar), null],
+            "No hay liquidaciones para este período.");
 
-        var encabezados = new[] { "id", "colaborador_id", "tmr_colaborador_id", "periodo", "neto_consolidado", "revisado" };
-        var contenido = ConstruirCsv(encabezados, filas.Select(f => new[]
-        {
-            f.Id.ToString(), f.ColaboradorId.ToString(), f.TmrColaboradorId, FormatFecha(f.Periodo),
-            FormatMonto(f.NetoConsolidado), f.Revisado ? "true" : "false"
-        }));
+        var honorarios = liquidaciones.SelectMany(l => l.Honorarios.Select(h => (l, h))).ToList();
+        var detalle = new HojaExcel(
+            "Detalle por proyecto", "Detalle de cada honorario", subtitulo,
+            ["Colaborador", "Período", "Proyecto", "Modalidad", "Días reconocidos", "Días del mes", "Proporcional acordado",
+             "Subtotal", "IVA", "Total del documento", "Retención en la fuente", "Retención de IVA", "Total de retenciones", "Neto"],
+            honorarios.Select(x => new object?[]
+            {
+                x.l.Colaborador, ReportesPdf.NombreMes(x.l.Periodo), x.h.Proyecto, x.h.Modalidad, x.h.DiasReconocidos, x.h.DiasReales,
+                x.h.ProporcionalAcordado, x.h.Subtotal, x.h.Iva, x.h.TotalDocumento, x.h.RetencionFuente, x.h.RetencionIva,
+                x.h.TotalRetenciones, x.h.Neto
+            }).ToList(),
+            ["Totales", null, null, null, null, null, honorarios.Sum(x => x.h.ProporcionalAcordado), honorarios.Sum(x => x.h.Subtotal),
+             honorarios.Sum(x => x.h.Iva), honorarios.Sum(x => x.h.TotalDocumento), honorarios.Sum(x => x.h.RetencionFuente),
+             honorarios.Sum(x => x.h.RetencionIva), honorarios.Sum(x => x.h.TotalRetenciones), honorarios.Sum(x => x.h.Neto)],
+            "No hay honorarios en estas liquidaciones.");
 
-        var nombreArchivo = periodo is null ? "liquidaciones_todas.csv" : $"liquidaciones_{periodo:yyyy-MM}.csv";
+        var cortes = liquidaciones.SelectMany(l => l.Cortes.Select(k => (l, k))).ToList();
+        var detalleCortes = new HojaExcel(
+            "Cortes", "Detalle por corte", subtitulo,
+            ["Colaborador", "Período", "Corte", "Días", "Base del corte", "Cuotas de anticipos", "Valor preparado"],
+            cortes.Select(x => new object?[]
+            {
+                x.l.Colaborador, ReportesPdf.NombreMes(x.l.Periodo), x.k.Corte, x.k.Rango, x.k.ValorBase, x.k.CuotasAnticipos, x.k.ValorPreparado
+            }).ToList(),
+            ["Totales", null, null, null, cortes.Sum(x => x.k.ValorBase), cortes.Sum(x => x.k.CuotasAnticipos), cortes.Sum(x => x.k.ValorPreparado)],
+            "No hay cortes en estas liquidaciones.");
+
+        var contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [resumen, detalle, detalleCortes]);
+        var nombreArchivo = periodo is null ? "liquidaciones_todas.xlsx" : $"liquidaciones_{periodo:yyyy-MM}.xlsx";
         return (contenido, nombreArchivo);
     }
 
-    // Mismo filtro que el CSV de liquidaciones, con nombres, cortes y totales para un PDF formal.
+    // PDF formal de liquidaciones: resumen y, por cada colaborador, sus honorarios (impuestos y
+    // retenciones) y sus cortes (base, cuotas de anticipos y valor preparado).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesPdfAsync(DateOnly? periodo, CancellationToken ct)
+    {
+        var filas = await FilasLiquidacionesAsync(periodo, ct);
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var contenido = LiquidacionesPdf.Generar(new ReporteLiquidacionesPdf(
+            config.RazonSocial, config.Ruc, config.Moneda, periodo, DateTime.UtcNow, filas));
+
+        var nombreArchivo = periodo is null ? "liquidaciones_todas.pdf" : $"liquidaciones_{periodo:yyyy-MM}.pdf";
+        return (contenido, nombreArchivo);
+    }
+
+    // Excel de colaboradores: las mismas columnas que el PDF. Sin cuentas bancarias (están cifradas).
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresAsync(CancellationToken ct)
+    {
+        var (titulo, subtitulo, encabezados, filas) = await DatosColaboradoresAsync(ct);
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc,
+            [new HojaExcel("Colaboradores", titulo, subtitulo, encabezados, filas.Select(f => f.Cast<object?>().ToArray()).ToList(),
+                Vacio: "No hay colaboradores registrados.")]);
+        return (contenido, "colaboradores.xlsx");
+    }
+
+    // PDF de colaboradores: lista de RPS con nombre, identificación, clasificación, frecuencia vigente y estado.
+    // No incluye cuentas bancarias (están cifradas y no deben circular en un PDF).
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresPdfAsync(CancellationToken ct)
+    {
+        var (titulo, subtitulo, encabezados, filas) = await DatosColaboradoresAsync(ct);
+        var anchos = new float[] { 3, 1.6f, 3, 1, 1.3f, 1.5f, 1.4f, 1.2f };
+        var columnas = encabezados.Select((e, i) => new ColumnaPdf(e, anchos[i])).ToList();
+        var activos = filas.Count(f => f[7] == "Activo");
+        var configurados = filas.Count(f => f[6] == "Configurado");
+
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var contenido = ReportesPdf.Generar(new ReporteTablaPdf(
+            config.RazonSocial, config.Ruc, titulo, $"Al {DateOnly.FromDateTime(DateTime.UtcNow):dd/MM/yyyy}", subtitulo,
+            DateTime.UtcNow, columnas, filas,
+            [$"Total: {filas.Count}", null, null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
+            "No hay colaboradores registrados."));
+
+        return (contenido, "colaboradores.pdf");
+    }
+
+    private async Task<(string Titulo, string Subtitulo, string[] Encabezados, List<string[]> Filas)> DatosColaboradoresAsync(CancellationToken ct)
+    {
+        var colaboradores = await db.ColaboradoresRps.AsNoTracking()
+            .OrderBy(c => c.Apellidos).ThenBy(c => c.TmrColaboradorId)
+            .ToListAsync(ct);
+
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
+        var frecuencias = (await db.ColaboradoresFrecuencia.AsNoTracking()
+                .Where(f => f.VigenteDesdeMes <= mesActual)
+                .ToListAsync(ct))
+            .GroupBy(f => f.ColaboradorId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.VigenteDesdeMes).First().Frecuencia);
+
+        var filas = colaboradores.Select(c => new[]
+        {
+            NombreColaborador(c.Nombres, c.Apellidos, c.TmrColaboradorId),
+            c.Identificacion ?? "—",
+            c.Correo ?? "—",
+            c.TmrColaboradorId,
+            c.Clasificacion?.ToString() ?? "Sin clasificar",
+            frecuencias.TryGetValue(c.Id, out var frec) ? (frec == Frecuencia.DosPagos ? "Quincena y fin de mes" : "Fin de mes") : "—",
+            c.EstadoConfiguracion == EstadoConfiguracion.Configurado ? "Configurado" : "Pendiente",
+            c.Activo ? "Activo" : "Inactivo"
+        }).ToList();
+
+        var activos = colaboradores.Count(c => c.Activo);
+        var configurados = colaboradores.Count(c => c.EstadoConfiguracion == EstadoConfiguracion.Configurado);
+        return ("Colaboradores registrados",
+            $"{colaboradores.Count} en total · {activos} activos · {configurados} configurados",
+            ["Colaborador", "Identificación", "Correo", "ID TMR", "Clasificación", "Frecuencia", "Configuración", "Estado"],
+            filas);
+    }
+
+    private record FilaHonorario(
+        DateOnly Periodo, int DiasReales, int DiasReconocidos, Modalidad Modalidad, decimal ProporcionalAcordado,
+        decimal Subtotal, decimal Iva, decimal TotalDocumento, decimal RetencionFuente, decimal RetencionIva,
+        decimal TotalRetenciones, decimal Neto, string TmrColaboradorId, string? Nombres, string? Apellidos,
+        string? Identificacion, string Proyecto);
+
+    // Honorarios con nombre de colaborador y de proyecto. Left join: el de un contrato que se paga
+    // por contrato no tiene proyecto.
+    private async Task<List<FilaHonorario>> FilasHonorariosAsync(DateOnly? periodo, CancellationToken ct)
+    {
+        var query = db.Honorarios.AsNoTracking().AsQueryable();
+        if (periodo is not null)
+            query = query.Where(h => h.Periodo == periodo);
+
+        return await query
+            .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new { h, c })
+            .GroupJoin(db.Proyectos.AsNoTracking(), x => x.h.ProyectoId, p => (Guid?)p.Id, (x, ps) => new { x.h, x.c, ps })
+            .SelectMany(x => x.ps.DefaultIfEmpty(), (x, p) => new FilaHonorario(
+                x.h.Periodo, x.h.DiasReales, x.h.DiasReconocidos, x.h.Modalidad, x.h.ProporcionalAcordado,
+                x.h.Subtotal, x.h.Iva, x.h.TotalDocumento, x.h.RetencionFuente, x.h.RetencionIva,
+                x.h.TotalRetenciones, x.h.Neto, x.c.TmrColaboradorId, x.c.Nombres, x.c.Apellidos,
+                x.c.Identificacion, p != null ? p.Nombre : "Pago por contrato"))
+            .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId).ThenBy(f => f.Proyecto)
+            .ToListAsync(ct);
+    }
+
+    private static readonly string[] MesesCortos = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+    // Liquidaciones con todo su detalle (lo mismo que se ve en la pantalla Liquidaciones).
+    private async Task<List<FilaLiquidacionPdf>> FilasLiquidacionesAsync(DateOnly? periodo, CancellationToken ct)
     {
         var query = db.Liquidaciones.AsNoTracking().AsQueryable();
         if (periodo is not null)
@@ -149,12 +263,31 @@ public class ExportacionesService(RpsDbContext db)
                 .Where(c => ids.Contains(c.LiquidacionId))
                 .ToListAsync(ct))
             .GroupBy(c => c.LiquidacionId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Tipo == TipoCorte.Quincena ? 0 : 1).ToList());
 
-        var filas = liquidaciones.Select(l =>
+        var honorarios = (await db.Honorarios.AsNoTracking()
+                .Where(h => h.LiquidacionId != null && ids.Contains(h.LiquidacionId!.Value))
+                .GroupJoin(db.Proyectos.AsNoTracking(), h => h.ProyectoId, p => (Guid?)p.Id, (h, ps) => new { h, ps })
+                .SelectMany(x => x.ps.DefaultIfEmpty(), (x, p) => new { x.h, Proyecto = p != null ? p.Nombre : "Pago por contrato" })
+                .ToListAsync(ct))
+            .GroupBy(x => x.h.LiquidacionId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Proyecto).Select(x => new DetalleHonorarioPdf(
+                x.Proyecto, x.h.Modalidad == Modalidad.MasIva ? "Más IVA" : "Neto", x.h.DiasReconocidos, x.h.DiasReales,
+                x.h.ProporcionalAcordado, x.h.Subtotal, x.h.Iva, x.h.TotalDocumento, x.h.RetencionFuente, x.h.RetencionIva,
+                x.h.TotalRetenciones, x.h.Neto)).ToList());
+
+        return liquidaciones.Select(l =>
         {
             var deLaLiquidacion = cortes.GetValueOrDefault(l.Id) ?? [];
             var nombre = $"{l.Nombres} {l.Apellidos}".Trim();
+            var finPeriodo = l.Periodo.AddMonths(1).AddDays(-1);
+            var mes = MesesCortos[l.Periodo.Month - 1];
+            var tieneQuincena = deLaLiquidacion.Any(c => c.Tipo == TipoCorte.Quincena);
+            var detalleCortes = deLaLiquidacion.Select(c => new DetalleCortePdf(
+                c.Tipo == TipoCorte.Quincena ? "Quincena" : "Fin de mes",
+                c.Tipo == TipoCorte.Quincena ? $"1 – 15 {mes}" : $"{(tieneQuincena ? 16 : 1)} – {finPeriodo.Day} {mes}",
+                c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado)).ToList();
+
             return new FilaLiquidacionPdf(
                 string.IsNullOrEmpty(nombre) ? $"ID TMR {l.TmrColaboradorId}" : nombre,
                 l.Identificacion,
@@ -165,110 +298,15 @@ public class ExportacionesService(RpsDbContext db)
                 deLaLiquidacion.Where(c => c.Tipo == TipoCorte.FinDeMes).Sum(c => c.ValorPreparado),
                 deLaLiquidacion.Sum(c => c.RecuperacionAdicional),
                 deLaLiquidacion.Count > 0 ? deLaLiquidacion.Sum(c => c.ValorPreparado) : l.NetoConsolidado,
-                l.Revisado);
+                l.Revisado,
+                honorarios.GetValueOrDefault(l.Id) ?? [],
+                detalleCortes);
         }).ToList();
-
-        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
-        var contenido = LiquidacionesPdf.Generar(new ReporteLiquidacionesPdf(
-            config.RazonSocial, config.Ruc, config.Moneda, periodo, DateTime.UtcNow, filas));
-
-        var nombreArchivo = periodo is null ? "liquidaciones_todas.pdf" : $"liquidaciones_{periodo:yyyy-MM}.pdf";
-        return (contenido, nombreArchivo);
-    }
-
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresAsync(CancellationToken ct)
-    {
-        var filas = await db.ColaboradoresRps.AsNoTracking()
-            .OrderBy(c => c.TmrColaboradorId)
-            .ToListAsync(ct);
-
-        var encabezados = new[] { "id", "tmr_colaborador_id", "clasificacion", "estado_configuracion", "activo", "creado_en" };
-        var contenido = ConstruirCsv(encabezados, filas.Select(c => new[]
-        {
-            c.Id.ToString(), c.TmrColaboradorId, c.Clasificacion?.ToString() ?? string.Empty, c.EstadoConfiguracion.ToString(),
-            c.Activo ? "true" : "false", FormatFechaHora(c.CreadoEn)
-        }));
-
-        return (contenido, "colaboradores.csv");
-    }
-
-    // PDF de colaboradores: lista de RPS con nombre, identificación, clasificación, frecuencia vigente y estado.
-    // No incluye cuentas bancarias (están cifradas y no deben circular en un PDF).
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresPdfAsync(CancellationToken ct)
-    {
-        var colaboradores = await db.ColaboradoresRps.AsNoTracking()
-            .OrderBy(c => c.Apellidos).ThenBy(c => c.TmrColaboradorId)
-            .ToListAsync(ct);
-
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
-        var frecuencias = (await db.ColaboradoresFrecuencia.AsNoTracking()
-                .Where(f => f.VigenteDesdeMes <= mesActual)
-                .ToListAsync(ct))
-            .GroupBy(f => f.ColaboradorId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.VigenteDesdeMes).First().Frecuencia);
-
-        var columnas = new List<ColumnaPdf>
-        {
-            new("Colaborador", 3), new("Identificación", 1.6f), new("Correo", 3), new("ID TMR", 1),
-            new("Clasificación", 1.3f), new("Frecuencia", 1.5f), new("Configuración", 1.4f), new("Estado", 1.2f)
-        };
-
-        var filasPdf = colaboradores.Select(c => new[]
-        {
-            NombreColaborador(c.Nombres, c.Apellidos, c.TmrColaboradorId),
-            c.Identificacion ?? "—",
-            c.Correo ?? "—",
-            c.TmrColaboradorId,
-            c.Clasificacion?.ToString() ?? "Sin clasificar",
-            frecuencias.TryGetValue(c.Id, out var frec) ? (frec == Frecuencia.DosPagos ? "Quincena y fin de mes" : "Fin de mes") : "—",
-            c.EstadoConfiguracion == EstadoConfiguracion.Configurado ? "Configurado" : "Pendiente",
-            c.Activo ? "Activo" : "Desactivado"
-        }).ToList();
-
-        var activos = colaboradores.Count(c => c.Activo);
-        var configurados = colaboradores.Count(c => c.EstadoConfiguracion == EstadoConfiguracion.Configurado);
-        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
-        var contenido = ReportesPdf.Generar(new ReporteTablaPdf(
-            config.RazonSocial, config.Ruc, "Colaboradores registrados",
-            $"Al {hoy:dd/MM/yyyy}",
-            $"{colaboradores.Count} en total · {activos} activos · {configurados} configurados",
-            DateTime.UtcNow, columnas, filasPdf,
-            [$"Total: {colaboradores.Count}", null, null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
-            "No hay colaboradores registrados."));
-
-        return (contenido, "colaboradores.pdf");
     }
 
     private static string NombreColaborador(string? nombres, string? apellidos, string tmrColaboradorId)
     {
         var nombre = $"{nombres} {apellidos}".Trim();
         return string.IsNullOrEmpty(nombre) ? $"ID TMR {tmrColaboradorId}" : nombre;
-    }
-
-    private static string FormatMonto(decimal valor) => valor.ToString("F2", CultureInfo.InvariantCulture);
-
-    private static string FormatFecha(DateOnly valor) => valor.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-    private static string FormatFechaHora(DateTime? valor) =>
-        valor?.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture) ?? string.Empty;
-
-    private static byte[] ConstruirCsv(IEnumerable<string> encabezados, IEnumerable<IEnumerable<string?>> filas)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine(string.Join(',', encabezados.Select(EscaparCsv)));
-
-        foreach (var fila in filas)
-            sb.AppendLine(string.Join(',', fila.Select(EscaparCsv)));
-
-        return Encoding.UTF8.GetBytes(sb.ToString());
-    }
-
-    private static string EscaparCsv(string? valor)
-    {
-        valor ??= string.Empty;
-        return valor.Contains(',') || valor.Contains('"') || valor.Contains('\n')
-            ? "\"" + valor.Replace("\"", "\"\"") + "\""
-            : valor;
     }
 }

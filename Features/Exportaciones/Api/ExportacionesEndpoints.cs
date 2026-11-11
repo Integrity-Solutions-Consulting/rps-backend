@@ -11,7 +11,7 @@ public static class ExportacionesEndpoints
         group.MapGet("/honorarios", async (DateOnly? periodo, ExportacionesService service, CancellationToken ct) =>
         {
             var (contenido, nombreArchivo) = await service.ExportarHonorariosAsync(periodo, ct);
-            return TypedResults.File(contenido, "text/csv", nombreArchivo);
+            return TypedResults.File(contenido, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo);
         });
 
         // GET /api/exportaciones/honorarios/pdf?periodo=2026-11-01 (sin periodo: todos los meses).
@@ -24,7 +24,7 @@ public static class ExportacionesEndpoints
         group.MapGet("/liquidaciones", async (DateOnly? periodo, ExportacionesService service, CancellationToken ct) =>
         {
             var (contenido, nombreArchivo) = await service.ExportarLiquidacionesAsync(periodo, ct);
-            return TypedResults.File(contenido, "text/csv", nombreArchivo);
+            return TypedResults.File(contenido, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo);
         });
 
         // GET /api/exportaciones/liquidaciones/pdf?periodo=2026-11-01 (sin periodo: todos los meses).
@@ -37,7 +37,7 @@ public static class ExportacionesEndpoints
         group.MapGet("/colaboradores", async (ExportacionesService service, CancellationToken ct) =>
         {
             var (contenido, nombreArchivo) = await service.ExportarColaboradoresAsync(ct);
-            return TypedResults.File(contenido, "text/csv", nombreArchivo);
+            return TypedResults.File(contenido, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo);
         });
 
         // GET /api/exportaciones/colaboradores/pdf

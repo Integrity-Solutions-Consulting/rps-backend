@@ -125,6 +125,11 @@ public class AnticiposService(RpsDbContext db)
         if (request.Cuotas.Select(c => c.Periodo!.Value).Distinct().Count() > 1)
             return AnticipoErrores.CuotasDeMesesDistintos;
 
+        // Una sola cuota por corte: dos en el mismo corte se suman en una.
+        var corteRepetido = request.Cuotas.GroupBy(c => c.Corte!.Value).FirstOrDefault(g => g.Count() > 1);
+        if (corteRepetido is not null)
+            return AnticipoErrores.CorteRepetido(corteRepetido.Key);
+
         var anticipo = await db.AnticiposAdicionales.FirstOrDefaultAsync(a => a.Id == anticipoId && a.ColaboradorId == colaboradorId, ct);
         if (anticipo is null)
             return AnticipoErrores.NoEncontrado(anticipoId);
@@ -180,12 +185,14 @@ public class AnticiposService(RpsDbContext db)
 
     // Frecuencia con la que se valida un plan de ese mes. Misma consulta que antes estaba dentro de
     // RegistrarPlanAsync; se separó para que el resumen use exactamente la misma regla.
-    private Task<Frecuencia> FrecuenciaParaPlanAsync(Guid colaboradorId, DateOnly periodo, CancellationToken ct) =>
-        db.ColaboradoresFrecuencia.AsNoTracking()
+    // Sin frecuencia registrada se paga solo a fin de mes (igual que LiquidacionesService): no se
+    // puede tomar la quincena, porque ese corte nunca se generaría.
+    private async Task<Frecuencia> FrecuenciaParaPlanAsync(Guid colaboradorId, DateOnly periodo, CancellationToken ct) =>
+        await db.ColaboradoresFrecuencia.AsNoTracking()
             .Where(f => f.ColaboradorId == colaboradorId && f.VigenteDesdeMes <= periodo)
             .OrderByDescending(f => f.VigenteDesdeMes)
-            .Select(f => f.Frecuencia)
-            .FirstOrDefaultAsync(ct);
+            .Select(f => (Frecuencia?)f.Frecuencia)
+            .FirstOrDefaultAsync(ct) ?? Frecuencia.FinDeMes;
 
     private async Task<decimal> SaldoPendienteColaboradorAsync(Guid colaboradorId, CancellationToken ct)
     {

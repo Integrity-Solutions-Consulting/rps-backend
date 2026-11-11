@@ -38,6 +38,10 @@ public static class AnticipoErrores
     public static readonly Error CorteIncompatibleConFrecuencia =
         Error.Validacion(
             "Anticipo.CorteIncompatibleConFrecuencia", "cuotas",
-            "El tipo de corte de cada cuota debe existir para la frecuencia de pago del colaborador en ese período " +
-            "(FinDeMes solo acepta cuotas de corte FinDeMes).");
+            "Este colaborador cobra solo a fin de mes: no se le puede descontar en la quincena porque ese día no se le paga. Pon la cuota en Fin de mes.");
+
+    public static Error CorteRepetido(TipoCorte corte) =>
+        Error.Validacion(
+            "Anticipo.CorteRepetido", "cuotas",
+            $"Estás poniendo dos cuotas en el mismo corte ({(corte == TipoCorte.Quincena ? "Quincena" : "Fin de mes")}). Deja una sola cuota por corte con el importe total.");
 }

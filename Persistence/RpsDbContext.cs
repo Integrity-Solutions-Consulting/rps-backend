@@ -6,7 +6,6 @@ using rps_backend.Features.Auth.Domain;
 using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Configuracion.Domain;
 using rps_backend.Features.Contratos.Domain;
-using rps_backend.Features.Exportaciones.Domain;
 using rps_backend.Features.Feriados.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Liquidaciones.Domain;
@@ -38,8 +37,6 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<CuotaRecuperacion> CuotasRecuperacion => Set<CuotaRecuperacion>();
     public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
     public DbSet<Feriado> Feriados => Set<Feriado>();
-    public DbSet<Exportacion> Exportaciones => Set<Exportacion>();
-    public DbSet<ExportacionItem> ExportacionItems => Set<ExportacionItem>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<Rol> Roles => Set<Rol>();
     public DbSet<UsuarioRol> UsuariosRoles => Set<UsuarioRol>();

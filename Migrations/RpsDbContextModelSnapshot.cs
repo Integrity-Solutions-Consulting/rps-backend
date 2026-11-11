@@ -821,95 +821,6 @@ namespace rps_backend.Migrations
                     b.ToTable("contrato_proyecto", "rps");
                 });
 
-            modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.Exportacion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<byte[]>("Contenido")
-                        .IsRequired()
-                        .HasColumnType("bytea")
-                        .HasColumnName("contenido");
-
-                    b.Property<string>("Corte")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("corte");
-
-                    b.Property<DateTime>("GeneradoEn")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("generado_en");
-
-                    b.Property<Guid>("GeneradoPor")
-                        .HasColumnType("uuid")
-                        .HasColumnName("generado_por");
-
-                    b.Property<string>("NombreArchivo")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("nombre_archivo");
-
-                    b.Property<DateOnly>("Periodo")
-                        .HasColumnType("date")
-                        .HasColumnName("periodo");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("integer")
-                        .HasColumnName("version");
-
-                    b.HasKey("Id")
-                        .HasName("pk_exportacion");
-
-                    b.HasIndex("Periodo", "Corte", "Version")
-                        .IsUnique()
-                        .HasDatabaseName("ix_exportacion_periodo_corte_version");
-
-                    b.ToTable("exportacion", "rps");
-                });
-
-            modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.ExportacionItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ColaboradorId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("colaborador_id");
-
-                    b.Property<Guid>("ExportacionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("exportacion_id");
-
-                    b.Property<decimal>("Importe")
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("importe");
-
-                    b.Property<Guid>("LiquidacionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("liquidacion_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_exportacion_item");
-
-                    b.HasIndex("ColaboradorId")
-                        .HasDatabaseName("ix_exportacion_item_colaborador_id");
-
-                    b.HasIndex("LiquidacionId")
-                        .HasDatabaseName("ix_exportacion_item_liquidacion_id");
-
-                    b.HasIndex("ExportacionId", "ColaboradorId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_exportacion_item_exportacion_id_colaborador_id");
-
-                    b.ToTable("exportacion_item", "rps");
-                });
-
             modelBuilder.Entity("rps_backend.Features.Feriados.Domain.Feriado", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1550,30 +1461,6 @@ namespace rps_backend.Migrations
                         .HasConstraintName("fk_contrato_proyecto_proyectos_proyecto_id");
                 });
 
-            modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.ExportacionItem", b =>
-                {
-                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
-                        .WithMany()
-                        .HasForeignKey("ColaboradorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_exportacion_item_colaborador_rps_colaborador_id");
-
-                    b.HasOne("rps_backend.Features.Exportaciones.Domain.Exportacion", null)
-                        .WithMany("Items")
-                        .HasForeignKey("ExportacionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_exportacion_item_exportacion_exportacion_id");
-
-                    b.HasOne("rps_backend.Features.Liquidaciones.Domain.Liquidacion", null)
-                        .WithMany()
-                        .HasForeignKey("LiquidacionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_exportacion_item_liquidaciones_liquidacion_id");
-                });
-
             modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.CondicionEconomica", b =>
                 {
                     b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
@@ -1689,11 +1576,6 @@ namespace rps_backend.Migrations
             modelBuilder.Entity("rps_backend.Features.Auth.Domain.Usuario", b =>
                 {
                     b.Navigation("Roles");
-                });
-
-            modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.Exportacion", b =>
-                {
-                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }
