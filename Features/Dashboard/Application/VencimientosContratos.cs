@@ -4,25 +4,27 @@ using rps_backend.Persistence;
 
 namespace rps_backend.Features.Dashboard.Application;
 
-// Una fila de "Vencimientos de contratos" en Inicio. ContratoId sirve para abrir el contrato en la
-// pantalla Contratos; Nombres/Apellidos vienen de la copia de TMR (nulos si el colaborador se creó a mano).
+// Una fila de "Vencimientos de contratos" en Inicio: UNA por contrato (el contrato es lo que se
+// vence, no cada proyecto). ContratoId sirve para abrir el contrato en la pantalla Contratos;
+// Nombres/Apellidos vienen de la copia de TMR. ProyectoId es siempre null (se conserva por
+// compatibilidad); ProyectoNombre lista los proyectos del contrato, o "Sin proyectos".
 public record VencimientoContratoResponse(
     Guid ContratoId,
     Guid ColaboradorId,
     string TmrColaboradorId,
     string? Nombres,
     string? Apellidos,
-    Guid ProyectoId,
+    Guid? ProyectoId,
     string ProyectoNombre,
     DateOnly FechaFinVigente,
     int DiasRestantes,
     bool AsignacionActiva);
 
-// Contratos que hay que mirar en Inicio (RN 13, RN 14, RN 15):
+// Contratos que hay que mirar en Inicio (RN 13, RN 14, RN 15), de todos los colaboradores y con o
+// sin proyectos:
 //  - por vencer: fin vigente (con adendas) entre hoy y hoy + "dias" (sin "dias": el primer aviso configurado, RN 13);
-//  - vencidos con la asignación todavía activa y sin otro contrato vigente para el mismo proyecto.
-// Un contrato puede cubrir varios proyectos (o ninguno): se avisa por cada par contrato-proyecto,
-// porque un proyecto puede necesitar revisión mientras otro del mismo contrato sigue sin problema.
+//  - vencidos sin otro contrato vigente para la persona y que todavía trabaja: alguna asignación
+//    activa en sus proyectos o, si el contrato no tiene proyectos, el colaborador sigue activo.
 // Solo informa: el vencimiento no bloquea la liquidación.
 public class VencimientosContratosService(RpsDbContext db)
 {
@@ -31,9 +33,7 @@ public class VencimientosContratosService(RpsDbContext db)
 
     public async Task<List<VencimientoContratoResponse>> ListarAsync(int? dias, CancellationToken ct)
     {
-        var plazo = dias is > 0 and <= 365
-            ? dias.Value
-            : (await db.ConfiguracionGlobal.AsNoTracking().Select(c => (int?)c.DiasAvisoVencimiento1).FirstOrDefaultAsync(ct)) ?? DiasPorDefecto;
+        var plazo = await PlazoAsync(db, dias, ct);
         var hoy = HoyEnEcuador();
         var limite = hoy.AddDays(plazo);
 
@@ -60,15 +60,7 @@ public class VencimientosContratosService(RpsDbContext db)
         DateOnly? FinVigente(Contrato c) =>
             c.FechaFin is null ? null : (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin);
 
-        // Un contrato sin proyecto (ej. personal de RR. HH.) no participa de este aviso: no hay
-        // asignación de TMR contra la que revisar su vigencia.
-        var conProyecto = contratos
-            .SelectMany(c => proyectosPorContrato.GetValueOrDefault(c.Id, []).Select(proyectoId => (Contrato: c, ProyectoId: proyectoId)))
-            .Select(x => (x.Contrato, x.ProyectoId, Fin: FinVigente(x.Contrato)))
-            .ToList();
-
-        if (conProyecto.Count == 0)
-            return [];
+        var conFin = contratos.Select(c => (Contrato: c, Fin: FinVigente(c))).ToList();
 
         // Asignaciones activas hoy, por colaborador y proyecto. Las que ya no vienen de TMR no cuentan (RN 22).
         var activas = (await db.Asignaciones.AsNoTracking()
@@ -78,32 +70,37 @@ public class VencimientosContratosService(RpsDbContext db)
             .Select(a => (a.ColaboradorId, a.ProyectoId))
             .ToHashSet();
 
-        // Pares colaborador-proyecto que ya tienen un contrato vigente (renovado, o indefinido): sus
-        // contratos viejos no se avisan.
-        var conContratoVigente = conProyecto
-            .Where(x => x.Fin is null || x.Fin >= hoy)
-            .Select(x => (x.Contrato.ColaboradorId, x.ProyectoId))
+        // Colaboradores con algún contrato vigente hoy (renovado, o indefinido): sus contratos viejos no se avisan.
+        var conContratoVigente = conFin
+            .Where(x => x.Contrato.FechaInicio <= hoy && (x.Fin is null || x.Fin >= hoy))
+            .Select(x => x.Contrato.ColaboradorId)
             .ToHashSet();
 
-        var elegidos = conProyecto.Where(x =>
+        var colaboradores = await db.ColaboradoresRps.AsNoTracking()
+            .Select(c => new { c.Id, c.TmrColaboradorId, c.Nombres, c.Apellidos, c.Activo })
+            .ToDictionaryAsync(c => c.Id, ct);
+
+        bool SigueTrabajando(Contrato c)
         {
-            var par = (x.Contrato.ColaboradorId, x.ProyectoId);
+            var proyectos = proyectosPorContrato.GetValueOrDefault(c.Id, []);
+            return proyectos.Count > 0
+                ? proyectos.Any(p => activas.Contains((c.ColaboradorId, p)))
+                : colaboradores.GetValueOrDefault(c.ColaboradorId)?.Activo == true;
+        }
+
+        var elegidos = conFin.Where(x =>
+        {
             var porVencer = x.Fin is not null && x.Fin >= hoy && x.Fin <= limite;
-            var vencidoConAsignacion = x.Fin is not null && x.Fin < hoy && activas.Contains(par) && !conContratoVigente.Contains(par);
-            return porVencer || vencidoConAsignacion;
+            var vencidoTrabajando = x.Fin is not null && x.Fin < hoy
+                && !conContratoVigente.Contains(x.Contrato.ColaboradorId) && SigueTrabajando(x.Contrato);
+            return porVencer || vencidoTrabajando;
         }).ToList();
 
         if (elegidos.Count == 0)
             return [];
 
-        var colaboradorIds = elegidos.Select(x => x.Contrato.ColaboradorId).Distinct().ToList();
-        var proyectoIds = elegidos.Select(x => x.ProyectoId).Distinct().ToList();
-
-        var colaboradores = await db.ColaboradoresRps.AsNoTracking()
-            .Where(c => colaboradorIds.Contains(c.Id))
-            .Select(c => new { c.Id, c.TmrColaboradorId, c.Nombres, c.Apellidos })
-            .ToDictionaryAsync(c => c.Id, ct);
-        var proyectos = await db.Proyectos.AsNoTracking()
+        var proyectoIds = elegidos.SelectMany(x => proyectosPorContrato.GetValueOrDefault(x.Contrato.Id, [])).Distinct().ToList();
+        var nombresProyecto = await db.Proyectos.AsNoTracking()
             .Where(p => proyectoIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.Nombre, ct);
 
@@ -111,24 +108,33 @@ public class VencimientosContratosService(RpsDbContext db)
             .Select(x =>
             {
                 var c = colaboradores.GetValueOrDefault(x.Contrato.ColaboradorId);
+                var proyectos = proyectosPorContrato.GetValueOrDefault(x.Contrato.Id, [])
+                    .Select(p => nombresProyecto.GetValueOrDefault(p, "Proyecto"))
+                    .ToList();
                 return new VencimientoContratoResponse(
                     x.Contrato.Id,
                     x.Contrato.ColaboradorId,
                     c?.TmrColaboradorId ?? string.Empty,
                     c?.Nombres,
                     c?.Apellidos,
-                    x.ProyectoId,
-                    proyectos.GetValueOrDefault(x.ProyectoId, string.Empty),
+                    null,
+                    proyectos.Count > 0 ? string.Join(", ", proyectos) : "Sin proyectos",
                     x.Fin!.Value,
                     x.Fin.Value.DayNumber - hoy.DayNumber,
-                    activas.Contains((x.Contrato.ColaboradorId, x.ProyectoId)));
+                    SigueTrabajando(x.Contrato));
             })
             .OrderBy(v => v.DiasRestantes)
             .ToList();
     }
 
+    // El plazo del aviso: el que pide la pantalla, o el primer aviso configurado (RN 13).
+    internal static async Task<int> PlazoAsync(RpsDbContext db, int? dias, CancellationToken ct) =>
+        dias is > 0 and <= 365
+            ? dias.Value
+            : (await db.ConfiguracionGlobal.AsNoTracking().Select(c => (int?)c.DiasAvisoVencimiento1).FirstOrDefaultAsync(ct)) ?? DiasPorDefecto;
+
     // "Hoy" en Ecuador: con UtcNow, después de las 19:00 ya sería el día siguiente.
-    private static DateOnly HoyEnEcuador()
+    internal static DateOnly HoyEnEcuador()
     {
         try
         {

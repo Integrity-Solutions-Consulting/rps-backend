@@ -12,6 +12,12 @@ public static class VencimientosContratosEndpoints
             .WithTags("Dashboard")
             .Produces<List<VencimientoContratoResponse>>();
 
+        // GET /api/dashboard/salidas-proyecto?dias=30 · salidas de proyectos que se pagan por proyecto.
+        app.MapGet("/api/dashboard/salidas-proyecto", async (int? dias, SalidasProyectoService service, CancellationToken ct) =>
+                TypedResults.Ok(await service.ListarAsync(dias, ct)))
+            .WithTags("Dashboard")
+            .Produces<List<SalidaProyectoResponse>>();
+
         return app;
     }
 }

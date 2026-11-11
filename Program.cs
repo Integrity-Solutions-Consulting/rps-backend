@@ -115,6 +115,7 @@ builder.Services.AddScoped<AnticiposService>();
 builder.Services.AddScoped<ConfiguracionService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<VencimientosContratosService>();
+builder.Services.AddScoped<SalidasProyectoService>();
 builder.Services.AddScoped<ExportacionesService>();
 builder.Services.AddScoped<ExportacionPagoService>();
 builder.Services.AddScoped<AuditoriaService>();

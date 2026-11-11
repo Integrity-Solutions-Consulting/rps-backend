@@ -58,12 +58,17 @@ public class LiquidacionesService(RpsDbContext db)
                 .ToListAsync(ct))
             .ToDictionary(c => c.Id);
 
-        var proyectoIds = honorariosNuevos.Concat(honorariosPrevios).Select(h => h.ProyectoId).Distinct().ToList();
+        var proyectoIds = honorariosNuevos.Concat(honorariosPrevios).Where(h => h.ProyectoId is not null).Select(h => h.ProyectoId!.Value).Distinct().ToList();
         var asignaciones = await db.Asignaciones.AsNoTracking()
             .Where(a => colaboradorIds.Contains(a.ColaboradorId) && proyectoIds.Contains(a.ProyectoId)
                 && !a.EliminadaEnOrigen
                 && a.FechaInicio <= finPeriodo && (a.FechaSalida == null || a.FechaSalida >= periodo))
             .ToListAsync(ct);
+
+        var contratoIdsHonorarios = honorariosNuevos.Concat(honorariosPrevios).Select(h => h.ContratoId).Distinct().ToList();
+        var inicioContrato = await db.Contratos.AsNoTracking()
+            .Where(c => contratoIdsHonorarios.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.FechaInicio, ct);
 
         // Cuotas de recuperación de Anticipos adicionales programadas para este período (RN 38).
         var recuperacionPorColaboradorYCorte = (await db.CuotasRecuperacion.AsNoTracking()
@@ -75,12 +80,16 @@ public class LiquidacionesService(RpsDbContext db)
             .GroupBy(x => (x.ColaboradorId, x.Corte))
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Importe));
 
-        decimal NetoMensualCompletoDe(IEnumerable<Honorario> grupoHonorarios) => grupoHonorarios.Sum(h =>
-        {
-            var condicion = condicionesPorId[h.CondicionEconomicaId];
-            return CalculoTributario.Calcular(
-                condicion.ImporteMensual, h.Modalidad, h.PorcentajeIva, h.PorcentajeRetencionFuente, h.PorcentajeRetencionIva).Neto;
-        });
+        // Cada honorario sale de una condición: la del contrato (pago por contrato, una sola) o la
+        // de cada proyecto (pago por proyecto).
+        decimal NetoMensualCompletoDe(IEnumerable<Honorario> grupoHonorarios) => grupoHonorarios
+            .DistinctBy(h => h.CondicionEconomicaId)
+            .Sum(h =>
+            {
+                var condicion = condicionesPorId[h.CondicionEconomicaId];
+                return CalculoTributario.Calcular(
+                    condicion.ImporteMensual, h.Modalidad, h.PorcentajeIva, h.PorcentajeRetencionFuente, h.PorcentajeRetencionIva).Neto;
+            });
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -92,7 +101,7 @@ public class LiquidacionesService(RpsDbContext db)
             var yaExistia = liquidacionesExistentes.TryGetValue(grupo.Key, out var liquidacion);
 
             var netoConsolidado = previosDelColaborador.Sum(h => h.Neto) + grupo.Sum(h => h.Neto);
-            var netoMensualCompleto = NetoMensualCompletoDe(previosDelColaborador) + NetoMensualCompletoDe(grupo);
+            var netoMensualCompleto = NetoMensualCompletoDe(previosDelColaborador.Concat(grupo));
 
             if (!yaExistia)
             {
@@ -115,12 +124,20 @@ public class LiquidacionesService(RpsDbContext db)
                 honorario.LiquidacionId = liquidacion!.Id;
 
             var frecuencia = frecuenciaPorColaborador.GetValueOrDefault(grupo.Key, Frecuencia.FinDeMes);
-            var proyectosDelColaborador = previosDelColaborador.Select(h => h.ProyectoId).Concat(grupo.Select(h => h.ProyectoId)).ToHashSet();
-            var asignacionesColaborador = asignaciones
+            // Desde cuándo trabajó en el período: por proyecto, la entrada a la asignación; por
+            // contrato, el inicio del contrato (los proyectos no cuentan). Sirve para RN 26.
+            var honorariosDelColaborador = previosDelColaborador.Concat(grupo).ToList();
+            var proyectosDelColaborador = honorariosDelColaborador.Where(h => h.ProyectoId is not null).Select(h => h.ProyectoId!.Value).ToHashSet();
+            var inicios = asignaciones
                 .Where(a => a.ColaboradorId == grupo.Key && proyectosDelColaborador.Contains(a.ProyectoId))
+                .Select(a => a.FechaInicio)
+                .Concat(honorariosDelColaborador.Where(h => h.ProyectoId is null)
+                    .Select(h => inicioContrato.GetValueOrDefault(h.ContratoId, periodo)))
+                .Select(f => f > periodo ? f : periodo)
                 .ToList();
+            DateOnly? inicioEfectivo = inicios.Count > 0 ? inicios.Min() : null;
 
-            var cortesCalculados = ConstruirCortes(frecuencia, netoConsolidado, netoMensualCompleto, asignacionesColaborador, periodo, finPeriodo, dia15);
+            var cortesCalculados = ConstruirCortes(frecuencia, netoConsolidado, netoMensualCompleto, inicioEfectivo, dia15);
 
             foreach (var corte in cortesCalculados)
                 corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((grupo.Key, corte.Tipo), 0m);
@@ -178,13 +195,10 @@ public class LiquidacionesService(RpsDbContext db)
     }
 
     private static List<Corte> ConstruirCortes(
-        Frecuencia frecuencia, decimal netoConsolidado, decimal netoMensualCompleto,
-        List<Asignacion> asignaciones, DateOnly periodo, DateOnly finPeriodo, DateOnly dia15)
+        Frecuencia frecuencia, decimal netoConsolidado, decimal netoMensualCompleto, DateOnly? inicioEfectivo, DateOnly dia15)
     {
-        if (frecuencia == Frecuencia.FinDeMes || asignaciones.Count == 0)
+        if (frecuencia == Frecuencia.FinDeMes || inicioEfectivo is not { } fechaInicioEfectiva)
             return [NuevoCorte(TipoCorte.FinDeMes, netoConsolidado)];
-
-        var fechaInicioEfectiva = asignaciones.Min(a => a.FechaInicio > periodo ? a.FechaInicio : periodo);
 
         // RN 26: ingreso después del día 15 con DosPagos -> todo el proporcional se prepara al
         // fin de mes, sin corte de quincena ese período.

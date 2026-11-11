@@ -10,7 +10,8 @@ public class Honorario
 
     public Guid ColaboradorId { get; set; }
 
-    public Guid ProyectoId { get; set; }
+    // Null: honorario de un contrato que se paga por contrato (un solo monto, sin proyecto).
+    public Guid? ProyectoId { get; set; }
 
     public Guid ContratoId { get; set; }
 

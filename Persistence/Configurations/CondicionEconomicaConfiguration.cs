@@ -25,5 +25,12 @@ public class CondicionEconomicaConfiguration : IEntityTypeConfiguration<Condicio
 
         // No se repite el mismo mes de vigencia dos veces para la misma relación colaborador-proyecto.
         builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId, c.MesInicioVigencia }).IsUnique();
+
+        // Pago por contrato (sin proyecto): uno solo por contrato y mes de vigencia. El índice de
+        // arriba no lo cubre porque en PostgreSQL dos NULL nunca chocan.
+        builder.HasIndex(c => new { c.ContratoId, c.MesInicioVigencia })
+            .IsUnique()
+            .HasFilter("proyecto_id IS NULL")
+            .HasDatabaseName("ix_condicion_economica_por_contrato");
     }
 }
