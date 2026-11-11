@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using rps_backend.Features.Colaboradores.Application;
+using rps_backend.Features.Colaboradores.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Proyectos.Domain;
 using rps_backend.Persistence;
@@ -20,13 +21,18 @@ public class HonorariosService(RpsDbContext db)
         var finPeriodo = periodo.AddMonths(1).AddDays(-1);
         var diasReales = finPeriodo.Day;
 
-        // Por si el recálculo diario todavía no corrió hoy: el estado debe estar al día antes de
-        // decidir a quién se le calcula el honorario.
-        await ColaboradorEstado.RecalcularTodosAsync(db, ct);
-
-        var colaboradores = await db.ColaboradoresRps.AsNoTracking()
-            .Where(c => c.Activo && c.EstadoConfiguracion == EstadoConfiguracion.Configurado)
+        // Activos e inactivos: quien salió de TMR a mitad de mes (y por eso quedó inactivo en RPS)
+        // cobra los días que trabajó. Los días salen de las fechas de sus asignaciones, así que a
+        // quien ya no trabajó en el período no se le genera nada (diasReconocidos == 0).
+        // Configurado se evalúa para el período, no para hoy: el contrato pudo terminar ese mes.
+        var candidatos = await db.ColaboradoresRps.AsNoTracking()
+            .Where(c => c.Clasificacion != null)
             .ToListAsync(ct);
+
+        var colaboradores = new List<ColaboradorRps>();
+        foreach (var candidato in candidatos)
+            if (await ColaboradorEstado.CalcularParaPeriodoAsync(candidato, db, periodo, ct) == EstadoConfiguracion.Configurado)
+                colaboradores.Add(candidato);
 
         if (colaboradores.Count == 0)
             return new GenerarHonorariosResponse(0, 0);

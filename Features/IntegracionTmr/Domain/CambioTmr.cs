@@ -8,7 +8,10 @@ public enum TipoCambioTmr
     FechaSalida,
     EstadoColaborador,
     ColaboradorEliminado,
-    ColaboradorRestaurado
+    ColaboradorRestaurado,
+    // Inactivo en TMR pero sigue activo en RPS porque tiene un anticipo adicional con saldo por
+    // recuperar. Se desactiva solo en la sincronización siguiente a que el saldo llegue a cero.
+    DesactivacionRetenida
 }
 
 // Aviso de un cambio relevante detectado en TMR (RN 50). No modifica liquidaciones: queda visible hasta
