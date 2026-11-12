@@ -25,7 +25,13 @@ public record ResumenAnticiposResponse(
     decimal SaldoPendiente,
     decimal Disponible,
     DateOnly Periodo,
-    List<TipoCorte> CortesPermitidos);
+    List<TipoCorte> CortesPermitidos,
+    List<TopeCorteResponse> TopesPorCorte);
+
+// Cuánto se le puede descontar en un corte del mes: lo que se le paga en ese corte (ValorBase:
+// quincena = 50% del subtotal, fin de mes = neto - quincena) menos lo que ya tienen programado
+// las cuotas de sus anticipos para ese mismo mes y corte (Comprometido).
+public record TopeCorteResponse(TipoCorte Corte, decimal ValorBase, decimal Comprometido, decimal Disponible);
 
 public record AnticipoAdicionalResponse(
     Guid Id, Guid ColaboradorId, decimal Monto, DateOnly Fecha, string? Observaciones,

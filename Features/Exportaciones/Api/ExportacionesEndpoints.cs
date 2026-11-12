@@ -21,16 +21,19 @@ public static class ExportacionesEndpoints
             return TypedResults.File(contenido, "application/pdf", nombreArchivo);
         });
 
-        group.MapGet("/liquidaciones", async (DateOnly? periodo, ExportacionesService service, CancellationToken ct) =>
+        // GET /api/exportaciones/liquidaciones?periodo=2026-11-01&vista=consolidado|porColaborador
+        // (sin vista: consolidado).
+        group.MapGet("/liquidaciones", async (DateOnly? periodo, string? vista, ExportacionesService service, CancellationToken ct) =>
         {
-            var (contenido, nombreArchivo) = await service.ExportarLiquidacionesAsync(periodo, ct);
+            var (contenido, nombreArchivo) = await service.ExportarLiquidacionesAsync(periodo, Vista(vista), ct);
             return TypedResults.File(contenido, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombreArchivo);
         });
 
-        // GET /api/exportaciones/liquidaciones/pdf?periodo=2026-11-01 (sin periodo: todos los meses).
-        group.MapGet("/liquidaciones/pdf", async (DateOnly? periodo, ExportacionesService service, CancellationToken ct) =>
+        // GET /api/exportaciones/liquidaciones/pdf?periodo=2026-11-01&vista=consolidado|porColaborador
+        // (sin periodo: todos los meses; sin vista: consolidado).
+        group.MapGet("/liquidaciones/pdf", async (DateOnly? periodo, string? vista, ExportacionesService service, CancellationToken ct) =>
         {
-            var (contenido, nombreArchivo) = await service.ExportarLiquidacionesPdfAsync(periodo, ct);
+            var (contenido, nombreArchivo) = await service.ExportarLiquidacionesPdfAsync(periodo, Vista(vista), ct);
             return TypedResults.File(contenido, "application/pdf", nombreArchivo);
         });
 
@@ -49,4 +52,9 @@ public static class ExportacionesEndpoints
 
         return app;
     }
+
+    private static VistaLiquidaciones Vista(string? vista) =>
+        string.Equals(vista, "porColaborador", StringComparison.OrdinalIgnoreCase)
+            ? VistaLiquidaciones.PorColaborador
+            : VistaLiquidaciones.Consolidado;
 }

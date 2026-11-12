@@ -1,7 +1,7 @@
 namespace rps_backend.Features.Anticipos.Domain;
 
 // "Anticipo adicional" (RN 41-47): valor extraordinario que se recupera con un plan de cuotas
-// en el mismo mes. El "anticipo ordinario" (el 50% de quincena) no es una deuda y no se modela
+// en el mismo mes. El "anticipo ordinario" (el 50% del subtotal en quincena) no es una deuda y no se modela
 // aquí: es simplemente el Corte Quincena de la Liquidación.
 public class AnticipoAdicional
 {

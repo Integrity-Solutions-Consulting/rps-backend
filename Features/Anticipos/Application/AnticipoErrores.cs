@@ -40,6 +40,18 @@ public static class AnticipoErrores
             "Anticipo.CorteIncompatibleConFrecuencia", "cuotas",
             "Este colaborador cobra solo a fin de mes: no se le puede descontar en la quincena porque ese día no se le paga. Pon la cuota en Fin de mes.");
 
+    public static Error CuotaExcedeCorte(TipoCorte corte, DateOnly periodo, decimal valorBase, decimal disponible)
+    {
+        var nombreCorte = corte == TipoCorte.Quincena ? "la quincena" : "el fin de mes";
+        var mes = periodo.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-EC"));
+        var detalle = disponible < valorBase
+            ? $" y otros anticipos ya tienen programados {valorBase - disponible:F2}, así que como máximo puedes poner {disponible:F2}"
+            : string.Empty;
+        return Error.Validacion(
+            "Anticipo.CuotaExcedeCorte", "cuotas",
+            $"En {nombreCorte} de {mes} solo se le pagan {valorBase:F2}{detalle}. No se le puede descontar más de lo que se le paga.");
+    }
+
     public static Error CorteRepetido(TipoCorte corte) =>
         Error.Validacion(
             "Anticipo.CorteRepetido", "cuotas",
