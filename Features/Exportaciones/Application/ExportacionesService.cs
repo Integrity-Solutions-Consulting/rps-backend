@@ -83,71 +83,57 @@ public class ExportacionesService(RpsDbContext db)
         return (contenido, nombreArchivo);
     }
 
-    // Excel de liquidaciones con toda la información: resumen por colaborador, detalle de cada
-    // honorario (proporcional, impuestos y retenciones) y cortes (base, cuotas de anticipos, preparado).
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesAsync(DateOnly? periodo, CancellationToken ct)
+    // Excel de liquidaciones.
+    //   Consolidado: una hoja con una fila por colaborador (neto, quincena, fin de mes, cuotas, a pagar) y totales.
+    //   PorColaborador: una hoja con un bloque por colaborador (honorarios con impuestos y retenciones, y cortes).
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesAsync(
+        DateOnly? periodo, VistaLiquidaciones vista, CancellationToken ct)
     {
         var liquidaciones = await FilasLiquidacionesAsync(periodo, ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var subtitulo = $"{(periodo is { } mes ? ReportesPdf.NombreMes(mes) : "Todos los períodos")} · {liquidaciones.Count} liquidaciones · Moneda {config.Moneda}";
 
-        var resumen = new HojaExcel(
-            "Resumen", "Liquidaciones de honorarios", subtitulo,
-            ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
-             "Cuotas de anticipos", "A pagar", "Revisada"],
-            liquidaciones.Select(l => new object?[]
-            {
-                l.Colaborador, l.Identificacion, l.Clasificacion ?? "Sin clasificar", ReportesPdf.NombreMes(l.Periodo),
-                l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.APagar, l.Revisado ? "Sí" : "Pendiente"
-            }).ToList(),
-            ["Totales", null, null, null, liquidaciones.Sum(l => l.NetoConsolidado), liquidaciones.Sum(l => l.Quincena),
-             liquidaciones.Sum(l => l.FinDeMes), liquidaciones.Sum(l => l.RecuperacionAnticipos), liquidaciones.Sum(l => l.APagar), null],
-            "No hay liquidaciones para este período.");
+        byte[] contenido;
+        if (vista == VistaLiquidaciones.PorColaborador)
+        {
+            contenido = LiquidacionesExcel.PorColaborador(config.RazonSocial, config.Ruc, subtitulo, liquidaciones, porMes: periodo is null);
+        }
+        else
+        {
+            var resumen = new HojaExcel(
+                "Consolidado", "Liquidaciones de honorarios · Consolidado", subtitulo,
+                ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
+                 "Cuotas de anticipos", "A pagar", "Revisada"],
+                liquidaciones.Select(l => new object?[]
+                {
+                    l.Colaborador, l.Identificacion, l.Clasificacion ?? "Sin clasificar", ReportesPdf.NombreMes(l.Periodo),
+                    l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.APagar, l.Revisado ? "Sí" : "Pendiente"
+                }).ToList(),
+                ["Totales", null, null, null, liquidaciones.Sum(l => l.NetoConsolidado), liquidaciones.Sum(l => l.Quincena),
+                 liquidaciones.Sum(l => l.FinDeMes), liquidaciones.Sum(l => l.RecuperacionAnticipos), liquidaciones.Sum(l => l.APagar), null],
+                "No hay liquidaciones para este período.");
+            contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [resumen]);
+        }
 
-        var honorarios = liquidaciones.SelectMany(l => l.Honorarios.Select(h => (l, h))).ToList();
-        var detalle = new HojaExcel(
-            "Detalle por proyecto", "Detalle de cada honorario", subtitulo,
-            ["Colaborador", "Período", "Proyecto", "Modalidad", "Días reconocidos", "Días del mes", "Proporcional acordado",
-             "Subtotal", "IVA", "Total del documento", "Retención en la fuente", "Retención de IVA", "Total de retenciones", "Neto"],
-            honorarios.Select(x => new object?[]
-            {
-                x.l.Colaborador, ReportesPdf.NombreMes(x.l.Periodo), x.h.Proyecto, x.h.Modalidad, x.h.DiasReconocidos, x.h.DiasReales,
-                x.h.ProporcionalAcordado, x.h.Subtotal, x.h.Iva, x.h.TotalDocumento, x.h.RetencionFuente, x.h.RetencionIva,
-                x.h.TotalRetenciones, x.h.Neto
-            }).ToList(),
-            ["Totales", null, null, null, null, null, honorarios.Sum(x => x.h.ProporcionalAcordado), honorarios.Sum(x => x.h.Subtotal),
-             honorarios.Sum(x => x.h.Iva), honorarios.Sum(x => x.h.TotalDocumento), honorarios.Sum(x => x.h.RetencionFuente),
-             honorarios.Sum(x => x.h.RetencionIva), honorarios.Sum(x => x.h.TotalRetenciones), honorarios.Sum(x => x.h.Neto)],
-            "No hay honorarios en estas liquidaciones.");
-
-        var cortes = liquidaciones.SelectMany(l => l.Cortes.Select(k => (l, k))).ToList();
-        var detalleCortes = new HojaExcel(
-            "Cortes", "Detalle por corte", subtitulo,
-            ["Colaborador", "Período", "Corte", "Días", "Base del corte", "Cuotas de anticipos", "Valor preparado"],
-            cortes.Select(x => new object?[]
-            {
-                x.l.Colaborador, ReportesPdf.NombreMes(x.l.Periodo), x.k.Corte, x.k.Rango, x.k.ValorBase, x.k.CuotasAnticipos, x.k.ValorPreparado
-            }).ToList(),
-            ["Totales", null, null, null, cortes.Sum(x => x.k.ValorBase), cortes.Sum(x => x.k.CuotasAnticipos), cortes.Sum(x => x.k.ValorPreparado)],
-            "No hay cortes en estas liquidaciones.");
-
-        var contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [resumen, detalle, detalleCortes]);
-        var nombreArchivo = periodo is null ? "liquidaciones_todas.xlsx" : $"liquidaciones_{periodo:yyyy-MM}.xlsx";
-        return (contenido, nombreArchivo);
+        return (contenido, NombreArchivoLiquidaciones(periodo, vista, "xlsx"));
     }
 
-    // PDF formal de liquidaciones: resumen y, por cada colaborador, sus honorarios (impuestos y
-    // retenciones) y sus cortes (base, cuotas de anticipos y valor preparado).
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesPdfAsync(DateOnly? periodo, CancellationToken ct)
+    // PDF formal de liquidaciones: el consolidado (tabla con todos y totales) o el detalle por
+    // colaborador (sus honorarios con impuestos y retenciones, y sus cortes con anticipos).
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesPdfAsync(
+        DateOnly? periodo, VistaLiquidaciones vista, CancellationToken ct)
     {
         var filas = await FilasLiquidacionesAsync(periodo, ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var contenido = LiquidacionesPdf.Generar(new ReporteLiquidacionesPdf(
-            config.RazonSocial, config.Ruc, config.Moneda, periodo, DateTime.UtcNow, filas));
+            config.RazonSocial, config.Ruc, config.Moneda, periodo, DateTime.UtcNow, filas, vista));
 
-        var nombreArchivo = periodo is null ? "liquidaciones_todas.pdf" : $"liquidaciones_{periodo:yyyy-MM}.pdf";
-        return (contenido, nombreArchivo);
+        return (contenido, NombreArchivoLiquidaciones(periodo, vista, "pdf"));
     }
+
+    // liquidaciones_consolidado_2026-11.pdf · liquidaciones_por_colaborador_todas.xlsx
+    private static string NombreArchivoLiquidaciones(DateOnly? periodo, VistaLiquidaciones vista, string extension) =>
+        $"liquidaciones_{(vista == VistaLiquidaciones.PorColaborador ? "por_colaborador" : "consolidado")}_{(periodo is null ? "todas" : periodo.Value.ToString("yyyy-MM"))}.{extension}";
 
     // Excel de colaboradores: las mismas columnas que el PDF. Sin cuentas bancarias (están cifradas).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresAsync(CancellationToken ct)

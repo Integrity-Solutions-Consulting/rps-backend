@@ -21,7 +21,13 @@ public record DetalleHonorarioPdf(
 public record DetalleCortePdf(string Corte, string Rango, decimal ValorBase, decimal CuotasAnticipos, decimal ValorPreparado);
 
 public record ReporteLiquidacionesPdf(
-    string RazonSocial, string Ruc, string Moneda, DateOnly? Periodo, DateTime GeneradoEn, IReadOnlyList<FilaLiquidacionPdf> Filas);
+    string RazonSocial, string Ruc, string Moneda, DateOnly? Periodo, DateTime GeneradoEn, IReadOnlyList<FilaLiquidacionPdf> Filas,
+    VistaLiquidaciones Vista = VistaLiquidaciones.Consolidado);
+
+// Consolidado: una fila por colaborador con los totales (el conglomerado).
+// PorColaborador: un solo archivo con el detalle de cada colaborador (honorarios con impuestos y
+// retenciones, y cortes con anticipos).
+public enum VistaLiquidaciones { Consolidado, PorColaborador }
 
 // PDF formal de liquidaciones: logo, encabezado con datos de la empresa, tabla y totales.
 // Logo: si existe Assets/logo.png junto al ejecutable se usa ese archivo; si no, se dibuja el distintivo "RPS".
@@ -53,10 +59,22 @@ public static class LiquidacionesPdf
             page.Header().Element(c => Encabezado(c, r, revisadas));
             page.Content().PaddingVertical(12).Column(col =>
             {
-                col.Item().Element(c => Tabla(c, r, porMes));
+                if (r.Vista == VistaLiquidaciones.Consolidado)
+                {
+                    col.Item().Element(c => Tabla(c, r, porMes));
+                    return;
+                }
+
+                if (r.Filas.Count == 0)
+                    col.Item().PaddingTop(30).AlignCenter().Text("No hay liquidaciones para este período.").FontSize(11).FontColor(Gris);
+
                 // Detalle de cada liquidación: honorarios con sus impuestos y cortes con anticipos.
+                var primero = true;
                 foreach (var f in r.Filas)
-                    col.Item().PaddingTop(18).EnsureSpace(160).Element(c => Detalle(c, f, porMes));
+                {
+                    col.Item().PaddingTop(primero ? 0 : 18).EnsureSpace(160).Element(c => Detalle(c, f, porMes));
+                    primero = false;
+                }
             });
             page.Footer().Row(row =>
             {
@@ -90,7 +108,9 @@ public static class LiquidacionesPdf
                 });
                 row.AutoItem().AlignMiddle().AlignRight().Column(titulo =>
                 {
-                    titulo.Item().AlignRight().Text("Liquidaciones de honorarios").FontSize(15).Bold().FontColor(Marino);
+                    titulo.Item().AlignRight().Text(r.Vista == VistaLiquidaciones.Consolidado
+                        ? "Liquidaciones de honorarios · Consolidado"
+                        : "Liquidaciones de honorarios · Por colaborador").FontSize(15).Bold().FontColor(Marino);
                     titulo.Item().AlignRight().Text(r.Periodo is { } p ? NombreMes(p) : "Todos los períodos").FontSize(11).FontColor(Verde);
                     titulo.Item().AlignRight().Text($"{revisadas} de {r.Filas.Count} revisadas · Moneda {r.Moneda}").FontColor(Gris);
                 });

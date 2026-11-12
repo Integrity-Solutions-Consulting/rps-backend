@@ -51,13 +51,12 @@ public class AnticiposService(RpsDbContext db)
         var saldoPendiente = await SaldoPendienteColaboradorAsync(colaboradorId, ct);
 
         var mes = periodo is { Day: 1 } p ? p : new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-        var cortes = await FrecuenciaParaPlanAsync(colaboradorId, mes, ct) == Frecuencia.DosPagos
-            ? new List<TipoCorte> { TipoCorte.Quincena, TipoCorte.FinDeMes }
-            : new List<TipoCorte> { TipoCorte.FinDeMes };
+        var topes = await TopesPorCorteAsync(colaborador, config, mes, excluirAnticipoId: null, ct);
 
         return new ResumenAnticiposResponse(
             colaboradorId, colaborador.Activo, netoMensualCompleto, config.PorcentajeMaximoAnticipo,
-            limite, saldoPendiente, Math.Max(0m, limite - saldoPendiente), mes, cortes);
+            limite, saldoPendiente, Math.Max(0m, limite - saldoPendiente), mes,
+            topes.Select(t => t.Corte).ToList(), topes);
     }
 
     // RN 21, 42-43: el límite es un % (configurable) del neto mensual completo SIN prorratear
@@ -109,7 +108,9 @@ public class AnticiposService(RpsDbContext db)
     }
 
     // RN 44-47: el plan reemplaza por completo al anterior (si existía); valida que la suma
-    // coincida exacto con el Monto, cada cuota sea positiva y todas sean de un mismo mes.
+    // coincida exacto con el Monto, cada cuota sea positiva y todas sean de un mismo mes. Además,
+    // ninguna cuota (sumada a las de sus otros anticipos en ese mes y corte) puede superar lo que
+    // se le paga en ese corte: quincena = 50% del subtotal, fin de mes = neto - quincena.
     public async Task<Resultado<AnticipoAdicionalResponse>> RegistrarPlanAsync(
         Guid colaboradorId, Guid anticipoId, RegistrarPlanRequest request, CancellationToken ct)
     {
@@ -148,6 +149,20 @@ public class AnticiposService(RpsDbContext db)
             return AnticipoErrores.CorteIncompatibleConFrecuencia;
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Dos planes del mismo colaborador guardados casi a la vez podrían leer el mismo
+        // "comprometido" y juntos pasarse del tope del corte: se serializa por colaborador (RC 04).
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM rps.colaborador_rps WHERE id = {colaboradorId} FOR UPDATE", ct);
+
+        var colaborador = await db.ColaboradoresRps.AsNoTracking().FirstAsync(c => c.Id == colaboradorId, ct);
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        var topes = await TopesPorCorteAsync(colaborador, config, periodoCuotas, excluirAnticipoId: anticipoId, ct);
+        foreach (var cuota in request.Cuotas)
+        {
+            var tope = topes.First(t => t.Corte == cuota.Corte!.Value);
+            if (cuota.Importe!.Value > tope.Disponible)
+                return AnticipoErrores.CuotaExcedeCorte(tope.Corte, periodoCuotas, tope.ValorBase, tope.Disponible);
+        }
 
         var existentes = await db.CuotasRecuperacion.Where(c => c.AnticipoAdicionalId == anticipoId).ToListAsync(ct);
         db.CuotasRecuperacion.RemoveRange(existentes);
@@ -215,40 +230,82 @@ public class AnticiposService(RpsDbContext db)
         return montoTotal - cuotasAplicadas;
     }
 
+    // Para el límite (RN 21): el neto mensual completo de lo que rige hoy.
     private async Task<decimal> NetoMensualCompletoAsync(
         rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
         rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config, CancellationToken ct)
     {
         var mesActual = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-
-        // Lo que rige este mes: un solo importe por contrato (pago por contrato) o uno por proyecto.
-        // Solo de contratos vigentes hoy: el de un contrato ya terminado no es parte del neto mensual.
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        var contratosVigentes = await ContratosVigentesAsync(colaborador.Id, hoy, ct);
+        return (await MensualCompletoAsync(colaborador, config, mesActual, hoy, hoy, ct)).Neto;
+    }
+
+    // Subtotal y neto mensuales COMPLETOS (sin prorratear) de las condiciones que rigen en `mes`,
+    // solo de contratos vigentes en algún momento entre `desde` y `hasta`: un solo importe por
+    // contrato (pago por contrato) o uno por proyecto.
+    private async Task<(decimal Subtotal, decimal Neto)> MensualCompletoAsync(
+        rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
+        rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config,
+        DateOnly mes, DateOnly desde, DateOnly hasta, CancellationToken ct)
+    {
+        var contratosVigentes = await ContratosVigentesAsync(colaborador.Id, desde, hasta, ct);
         var condicionesVigentes = rps_backend.Features.Honorarios.Application.CondicionesVigentes.Seleccionar(
                 await db.CondicionesEconomicas.AsNoTracking()
-                    .Where(c => c.ColaboradorId == colaborador.Id && c.MesInicioVigencia <= mesActual)
+                    .Where(c => c.ColaboradorId == colaborador.Id && c.MesInicioVigencia <= mes)
                     .ToListAsync(ct),
-                mesActual)
+                mes)
             .Where(c => contratosVigentes.Contains(c.ContratoId))
             .ToList();
 
         if (condicionesVigentes.Count == 0)
-            return 0m;
+            return (0m, 0m);
 
         var pctRetencionIva = colaborador.Clasificacion == Clasificacion.Profesional
             ? config.PorcentajeRetencionIvaProfesional
             : config.PorcentajeRetencionIvaJunior;
 
-        return condicionesVigentes.Sum(c => CalculoTributario.Calcular(
-            c.ImporteMensual, c.Modalidad, config.PorcentajeIva, config.PorcentajeRetencionFuente, pctRetencionIva).Neto);
+        var calculos = condicionesVigentes.Select(c => CalculoTributario.Calcular(
+            c.ImporteMensual, c.Modalidad, config.PorcentajeIva, config.PorcentajeRetencionFuente, pctRetencionIva)).ToList();
+        return (calculos.Sum(r => r.Subtotal), calculos.Sum(r => r.Neto));
     }
 
-    // Contratos del colaborador vigentes en la fecha (con adendas; sin fecha de fin = indefinido).
-    private async Task<HashSet<Guid>> ContratosVigentesAsync(Guid colaboradorId, DateOnly fecha, CancellationToken ct)
+    // Tope de descuento por corte del mes (misma regla que LiquidacionesService vía
+    // DistribucionCortes), menos lo ya programado por sus otros anticipos en ese mes y corte.
+    // `excluirAnticipoId`: el anticipo cuyo plan se está reemplazando no cuenta como comprometido.
+    private async Task<List<TopeCorteResponse>> TopesPorCorteAsync(
+        rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
+        rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config,
+        DateOnly mes, Guid? excluirAnticipoId, CancellationToken ct)
+    {
+        var frecuencia = await FrecuenciaParaPlanAsync(colaborador.Id, mes, ct);
+        var (subtotal, neto) = await MensualCompletoAsync(colaborador, config, mes, mes, mes.AddMonths(1).AddDays(-1), ct);
+        var valores = rps_backend.Features.Liquidaciones.Domain.DistribucionCortes.MesCompleto(frecuencia, subtotal, neto);
+
+        var comprometido = (await db.CuotasRecuperacion.AsNoTracking()
+                .Where(c => c.Periodo == mes)
+                .Join(db.AnticiposAdicionales.AsNoTracking(), c => c.AnticipoAdicionalId, a => a.Id,
+                    (c, a) => new { a.ColaboradorId, c.AnticipoAdicionalId, c.Corte, c.Importe })
+                .Where(x => x.ColaboradorId == colaborador.Id && x.AnticipoAdicionalId != excluirAnticipoId)
+                .ToListAsync(ct))
+            .GroupBy(x => x.Corte)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Importe));
+
+        return valores
+            .OrderBy(v => v.Key == TipoCorte.Quincena ? 0 : 1)
+            .Select(v =>
+            {
+                var usado = comprometido.GetValueOrDefault(v.Key, 0m);
+                return new TopeCorteResponse(v.Key, v.Value, usado, Math.Max(v.Value - usado, 0m));
+            })
+            .ToList();
+    }
+
+    // Contratos del colaborador vigentes en algún momento entre `desde` y `hasta` (con adendas;
+    // sin fecha de fin = indefinido). Con desde == hasta es "vigentes en esa fecha".
+    private async Task<HashSet<Guid>> ContratosVigentesAsync(Guid colaboradorId, DateOnly desde, DateOnly hasta, CancellationToken ct)
     {
         var contratos = await db.Contratos.AsNoTracking()
-            .Where(c => c.ColaboradorId == colaboradorId && c.FechaInicio <= fecha)
+            .Where(c => c.ColaboradorId == colaboradorId && c.FechaInicio <= hasta)
             .Select(c => new { c.Id, c.FechaFin })
             .ToListAsync(ct);
         var ids = contratos.Select(c => c.Id).ToList();
@@ -257,7 +314,7 @@ public class AnticiposService(RpsDbContext db)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
         return contratos
-            .Where(c => c.FechaFin is null || (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin.Value) >= fecha)
+            .Where(c => c.FechaFin is null || (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin.Value) >= desde)
             .Select(c => c.Id)
             .ToHashSet();
     }

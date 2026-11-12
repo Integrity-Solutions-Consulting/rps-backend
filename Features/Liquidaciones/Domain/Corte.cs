@@ -26,8 +26,8 @@ public class Corte
     // Contabilidad resolver).
     public decimal RecuperacionNoAplicada { get; set; }
 
-    // Solo en el corte Quincena: cuánto se le restó de su base ordinaria (mitad del neto mensual
-    // completo) porque, con los días reales del período, el corte FinDeMes habría quedado
+    // Solo en el corte Quincena: cuánto se le restó de su base ordinaria (50% del subtotal
+    // mensual completo) porque, con los días reales del período, el corte FinDeMes habría quedado
     // negativo (RN 27 — salida en la segunda mitad del mes). 0 si no aplicó.
     public decimal AjustePorProrrateo { get; set; }
 
