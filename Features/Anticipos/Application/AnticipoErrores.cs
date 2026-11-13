@@ -52,6 +52,16 @@ public static class AnticipoErrores
             $"En {nombreCorte} de {mes} solo se le pagan {valorBase:F2}{detalle}. No se le puede descontar más de lo que se le paga.");
     }
 
+    public static Error QuincenaYaPagada(DateOnly periodo) =>
+        Error.Validacion(
+            "Anticipo.QuincenaYaPagada", "cuotas",
+            $"La quincena de {periodo.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-EC"))} ya se pagó: solo se le puede descontar de lo que le queda, en el fin de mes.");
+
+    public static readonly Error QuincenaPagadaNoSeQuita =
+        Error.Validacion(
+            "Anticipo.QuincenaPagadaNoSeQuita", "cuotas",
+            "La cuota de quincena de este anticipo ya se descontó en un pago hecho: déjala igual y ajusta solo el fin de mes.");
+
     public static Error CorteRepetido(TipoCorte corte) =>
         Error.Validacion(
             "Anticipo.CorteRepetido", "cuotas",

@@ -26,7 +26,9 @@ public record ResumenAnticiposResponse(
     decimal Disponible,
     DateOnly Periodo,
     List<TipoCorte> CortesPermitidos,
-    List<TopeCorteResponse> TopesPorCorte);
+    List<TopeCorteResponse> TopesPorCorte,
+    // Pasó el día 15 del mes: la quincena ya se pagó y solo se puede descontar del fin de mes.
+    bool QuincenaCerrada);
 
 // Cuánto se le puede descontar en un corte del mes: lo que se le paga en ese corte (ValorBase:
 // quincena = 50% del subtotal, fin de mes = neto - quincena) menos lo que ya tienen programado
