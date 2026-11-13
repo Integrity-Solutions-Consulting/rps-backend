@@ -53,3 +53,6 @@ Desktop.ini
 graphify-out/
 .agents/
 
+
+# [RESPALDO DE LLAVES - TEMPORAL] carpeta local del espejo de llaves: nunca subirla
+estado-interno/

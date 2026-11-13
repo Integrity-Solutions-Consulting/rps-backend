@@ -38,6 +38,7 @@ using rps_backend.Features.Proyectos.Api;
 using rps_backend.Features.Proyectos.Application;
 using rps_backend.Integrations.Tmr;
 using rps_backend.Persistence;
+using rps_backend.Persistence.Interno; // [RESPALDO DE LLAVES · TEMPORAL]
 
 // QuestPDF (PDF de liquidaciones): licencia Community, gratuita para empresas con ingresos anuales
 // menores a 1 millón de USD. Si la empresa supera ese límite, cambiar a la licencia que corresponda.
@@ -103,6 +104,9 @@ builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection()
     .PersistKeysToDbContext<RpsDbContext>()
     .SetApplicationName("rps-backend");
+// [RESPALDO DE LLAVES · TEMPORAL] Copia las llaves de cifrado a la carpeta de RPS_ESTADO_INTERNO_DIR y las
+// restaura si la base llega sin ellas. Sin esa variable no hace nada. Ver Persistence/Interno/EstadoInterno.cs.
+builder.Services.AddEstadoInterno(builder.Configuration);
 builder.Services.AddSingleton<CuentaBancariaProtector>();
 builder.Services.AddScoped<ColaboradoresService>();
 builder.Services.AddScoped<ContratosService>();
