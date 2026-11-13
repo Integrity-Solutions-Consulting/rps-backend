@@ -1,16 +1,20 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using rps_backend.Features.Exportaciones.Domain;
 using rps_backend.Persistence;
 using rps_backend.Shared;
 
 namespace rps_backend.Features.Exportaciones.Application;
 
-// Exportaciones de solo lectura en Excel y PDF (liquidaciones, honorarios y colaboradores).
-// No hay forma de fallar: sin Resultado<T>.
+// Exportaciones en Excel y PDF (liquidaciones, honorarios y colaboradores). Los datos son de solo lectura;
+// lo único que se escribe es el registro de cada archivo generado (Exportacion), para el historial
+// "Exportaciones recientes". No hay forma de fallar: sin Resultado<T>.
 public class ExportacionesService(RpsDbContext db)
 {
     // Excel de honorarios: una fila por honorario (proyecto, o el contrato si se paga por contrato).
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosAsync(DateOnly? periodo, CancellationToken ct)
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosAsync(DateOnly? periodo, Guid usuarioId, CancellationToken ct)
     {
         var filas = await FilasHonorariosAsync(periodo, ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
@@ -34,11 +38,13 @@ public class ExportacionesService(RpsDbContext db)
 
         var contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [hoja]);
         var nombreArchivo = periodo is null ? "honorarios_todos.xlsx" : $"honorarios_{periodo:yyyy-MM}.xlsx";
+        await RegistrarAsync(TipoReporte.Honorarios, null, FormatoReporte.Excel, periodo, nombreArchivo,
+            filas.Count, filas.Sum(f => f.Neto), HuellaHonorarios(filas, config), usuarioId, ct);
         return (contenido, nombreArchivo);
     }
 
     // PDF de honorarios: mismos datos que el Excel, con totales.
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosPdfAsync(DateOnly? periodo, CancellationToken ct)
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarHonorariosPdfAsync(DateOnly? periodo, Guid usuarioId, CancellationToken ct)
     {
         var filas = await FilasHonorariosAsync(periodo, ct);
 
@@ -80,6 +86,8 @@ public class ExportacionesService(RpsDbContext db)
             "No hay honorarios calculados para este período."));
 
         var nombreArchivo = periodo is null ? "honorarios_todos.pdf" : $"honorarios_{periodo:yyyy-MM}.pdf";
+        await RegistrarAsync(TipoReporte.Honorarios, null, FormatoReporte.Pdf, periodo, nombreArchivo,
+            filas.Count, filas.Sum(f => f.Neto), HuellaHonorarios(filas, config), usuarioId, ct);
         return (contenido, nombreArchivo);
     }
 
@@ -87,7 +95,7 @@ public class ExportacionesService(RpsDbContext db)
     //   Consolidado: una hoja con una fila por colaborador (neto, quincena, fin de mes, cuotas, a pagar) y totales.
     //   PorColaborador: una hoja con un bloque por colaborador (honorarios con impuestos y retenciones, y cortes).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesAsync(
-        DateOnly? periodo, VistaLiquidaciones vista, CancellationToken ct)
+        DateOnly? periodo, VistaLiquidaciones vista, Guid usuarioId, CancellationToken ct)
     {
         var liquidaciones = await FilasLiquidacionesAsync(periodo, ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
@@ -115,20 +123,26 @@ public class ExportacionesService(RpsDbContext db)
             contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [resumen]);
         }
 
-        return (contenido, NombreArchivoLiquidaciones(periodo, vista, "xlsx"));
+        var nombreArchivo = NombreArchivoLiquidaciones(periodo, vista, "xlsx");
+        await RegistrarAsync(TipoReporte.Liquidaciones, vista, FormatoReporte.Excel, periodo, nombreArchivo,
+            liquidaciones.Count, liquidaciones.Sum(l => l.NetoConsolidado), HuellaLiquidaciones(liquidaciones, vista, config), usuarioId, ct);
+        return (contenido, nombreArchivo);
     }
 
     // PDF formal de liquidaciones: el consolidado (tabla con todos y totales) o el detalle por
     // colaborador (sus honorarios con impuestos y retenciones, y sus cortes con anticipos).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarLiquidacionesPdfAsync(
-        DateOnly? periodo, VistaLiquidaciones vista, CancellationToken ct)
+        DateOnly? periodo, VistaLiquidaciones vista, Guid usuarioId, CancellationToken ct)
     {
         var filas = await FilasLiquidacionesAsync(periodo, ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var contenido = LiquidacionesPdf.Generar(new ReporteLiquidacionesPdf(
             config.RazonSocial, config.Ruc, config.Moneda, periodo, DateTime.UtcNow, filas, vista));
 
-        return (contenido, NombreArchivoLiquidaciones(periodo, vista, "pdf"));
+        var nombreArchivo = NombreArchivoLiquidaciones(periodo, vista, "pdf");
+        await RegistrarAsync(TipoReporte.Liquidaciones, vista, FormatoReporte.Pdf, periodo, nombreArchivo,
+            filas.Count, filas.Sum(l => l.NetoConsolidado), HuellaLiquidaciones(filas, vista, config), usuarioId, ct);
+        return (contenido, nombreArchivo);
     }
 
     // liquidaciones_consolidado_2026-11.pdf · liquidaciones_por_colaborador_todas.xlsx
@@ -136,19 +150,21 @@ public class ExportacionesService(RpsDbContext db)
         $"liquidaciones_{(vista == VistaLiquidaciones.PorColaborador ? "por_colaborador" : "consolidado")}_{(periodo is null ? "todas" : periodo.Value.ToString("yyyy-MM"))}.{extension}";
 
     // Excel de colaboradores: las mismas columnas que el PDF. Sin cuentas bancarias (están cifradas).
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresAsync(CancellationToken ct)
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresAsync(Guid usuarioId, CancellationToken ct)
     {
         var (titulo, subtitulo, encabezados, filas) = await DatosColaboradoresAsync(ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc,
             [new HojaExcel("Colaboradores", titulo, subtitulo, encabezados, filas.Select(f => f.Cast<object?>().ToArray()).ToList(),
                 Vacio: "No hay colaboradores registrados.")]);
+        await RegistrarAsync(TipoReporte.Colaboradores, null, FormatoReporte.Excel, null, "colaboradores.xlsx",
+            filas.Count, null, HuellaColaboradores(filas, config), usuarioId, ct);
         return (contenido, "colaboradores.xlsx");
     }
 
     // PDF de colaboradores: lista de RPS con nombre, identificación, clasificación, frecuencia vigente y estado.
     // No incluye cuentas bancarias (están cifradas y no deben circular en un PDF).
-    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresPdfAsync(CancellationToken ct)
+    public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresPdfAsync(Guid usuarioId, CancellationToken ct)
     {
         var (titulo, subtitulo, encabezados, filas) = await DatosColaboradoresAsync(ct);
         var anchos = new float[] { 3, 1.6f, 3, 1, 1.3f, 1.5f, 1.4f, 1.2f };
@@ -163,6 +179,8 @@ public class ExportacionesService(RpsDbContext db)
             [$"Total: {filas.Count}", null, null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
             "No hay colaboradores registrados."));
 
+        await RegistrarAsync(TipoReporte.Colaboradores, null, FormatoReporte.Pdf, null, "colaboradores.pdf",
+            filas.Count, null, HuellaColaboradores(filas, config), usuarioId, ct);
         return (contenido, "colaboradores.pdf");
     }
 
@@ -200,6 +218,141 @@ public class ExportacionesService(RpsDbContext db)
             filas);
     }
 
+    // ── Historial "Exportaciones recientes" ───────────────────────────────────────────
+
+    // Lista lo exportado, de lo más nuevo a lo más antiguo.
+    //   todos = true: todo, sin filtro de mes.
+    //   todos = false: solo las exportaciones de ese mes (periodo null = las de "todos los meses" y colaboradores).
+    // DatosCambiaron compara la huella guardada con la de hoy (null si no se pudo comprobar).
+    public async Task<PaginaExportacionesResponse> HistorialAsync(
+        DateOnly? periodo, bool todos, TipoReporte? tipo, int pagina, int tamano, CancellationToken ct)
+    {
+        pagina = Math.Max(1, pagina);
+        tamano = Math.Clamp(tamano, 1, 50);
+
+        var query = db.Exportaciones.AsNoTracking().AsQueryable();
+        if (!todos)
+            query = periodo is null ? query.Where(e => e.Periodo == null) : query.Where(e => e.Periodo == periodo);
+        if (tipo is not null)
+            query = query.Where(e => e.Tipo == tipo);
+
+        var total = await query.CountAsync(ct);
+        var filas = await query
+            .OrderByDescending(e => e.GeneradoEn)
+            .Skip((pagina - 1) * tamano).Take(tamano)
+            .GroupJoin(db.Usuarios.AsNoTracking(), e => e.GeneradoPorUsuarioId, u => u.Id, (e, us) => new { e, us })
+            .SelectMany(x => x.us.DefaultIfEmpty(), (x, u) => new { x.e, Usuario = u != null ? u.Nombre : null })
+            .ToListAsync(ct);
+
+        // Una huella actual por reporte distinto de la página (no por fila): Excel y PDF del mismo reporte comparten datos.
+        var actuales = new Dictionary<(TipoReporte, VistaLiquidaciones?, DateOnly?), string?>();
+        foreach (var clave in filas.Select(f => (f.e.Tipo, f.e.Vista, f.e.Periodo)).Distinct())
+        {
+            try { actuales[clave] = await HuellaActualAsync(clave.Tipo, clave.Vista, clave.Periodo, ct); }
+            catch (Exception) when (!ct.IsCancellationRequested) { actuales[clave] = null; }
+        }
+
+        var items = filas.Select(f =>
+        {
+            var actual = actuales[(f.e.Tipo, f.e.Vista, f.e.Periodo)];
+            return new ExportacionResponse(
+                f.e.Id, ClaveTipo(f.e.Tipo), ClaveVista(f.e.Vista), ClaveFormato(f.e.Formato), f.e.Periodo, f.e.NombreArchivo,
+                f.e.Registros, f.e.TotalNeto, f.Usuario, f.e.GeneradoEn,
+                actual is null ? null : !string.Equals(actual, f.e.HuellaDatos, StringComparison.OrdinalIgnoreCase));
+        }).ToList();
+
+        return new PaginaExportacionesResponse(items, total, pagina, tamano);
+    }
+
+    // La última exportación de cada reporte para un mes (periodo null = "todos los meses").
+    // Colaboradores no tiene mes: siempre se devuelve su última exportación.
+    public async Task<List<UltimaExportacionResponse>> UltimasAsync(DateOnly? periodo, CancellationToken ct)
+    {
+        var recientes = await db.Exportaciones.AsNoTracking()
+            .Where(e => e.Tipo == TipoReporte.Colaboradores || (periodo == null ? e.Periodo == null : e.Periodo == periodo))
+            .OrderByDescending(e => e.GeneradoEn)
+            .Take(200)
+            .GroupJoin(db.Usuarios.AsNoTracking(), e => e.GeneradoPorUsuarioId, u => u.Id, (e, us) => new { e, us })
+            .SelectMany(x => x.us.DefaultIfEmpty(), (x, u) => new { x.e, Usuario = u != null ? u.Nombre : null })
+            .ToListAsync(ct);
+
+        return recientes
+            .GroupBy(x => (x.e.Tipo, x.e.Vista))
+            .Select(g => g.First())
+            .Select(x => new UltimaExportacionResponse(
+                ClaveTipo(x.e.Tipo), ClaveVista(x.e.Vista), ClaveFormato(x.e.Formato), x.e.GeneradoEn, x.Usuario))
+            .ToList();
+    }
+
+    private async Task RegistrarAsync(
+        TipoReporte tipo, VistaLiquidaciones? vista, FormatoReporte formato, DateOnly? periodo, string nombreArchivo,
+        int registros, decimal? totalNeto, string huella, Guid usuarioId, CancellationToken ct)
+    {
+        db.Exportaciones.Add(new Exportacion
+        {
+            Tipo = tipo, Vista = vista, Formato = formato, Periodo = periodo, NombreArchivo = nombreArchivo,
+            Registros = registros, TotalNeto = totalNeto, HuellaDatos = huella, GeneradoPorUsuarioId = usuarioId,
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<string> HuellaActualAsync(TipoReporte tipo, VistaLiquidaciones? vista, DateOnly? periodo, CancellationToken ct)
+    {
+        var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
+        return tipo switch
+        {
+            TipoReporte.Honorarios => HuellaHonorarios(await FilasHonorariosAsync(periodo, ct), config),
+            TipoReporte.Liquidaciones => HuellaLiquidaciones(await FilasLiquidacionesAsync(periodo, ct), vista ?? VistaLiquidaciones.Consolidado, config),
+            _ => HuellaColaboradores((await DatosColaboradoresAsync(ct)).Filas, config),
+        };
+    }
+
+    // Huella = los datos que muestra el reporte, más la empresa del encabezado. El mismo valor para Excel y PDF
+    // del mismo reporte (se usan las columnas del Excel, que incluyen las del PDF).
+    private static string HuellaHonorarios(List<FilaHonorario> filas, Features.Configuracion.Domain.ConfiguracionGlobal config) =>
+        Huella(new { Empresa = Empresa(config), Filas = filas });
+
+    // Consolidado: solo sus columnas; por colaborador: todo el detalle (honorarios y cortes).
+    private static string HuellaLiquidaciones(
+        List<FilaLiquidacionPdf> filas, VistaLiquidaciones vista, Features.Configuracion.Domain.ConfiguracionGlobal config) =>
+        vista == VistaLiquidaciones.PorColaborador
+            ? Huella(new { Empresa = Empresa(config), Filas = filas })
+            : Huella(new
+            {
+                Empresa = Empresa(config),
+                Filas = filas.Select(l => new
+                {
+                    l.Colaborador, l.Identificacion, l.Clasificacion, l.Periodo, l.NetoConsolidado,
+                    l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.APagar, l.Revisado
+                })
+            });
+
+    private static string HuellaColaboradores(List<string[]> filas, Features.Configuracion.Domain.ConfiguracionGlobal config) =>
+        Huella(new { Empresa = Empresa(config), Filas = filas });
+
+    private static object Empresa(Features.Configuracion.Domain.ConfiguracionGlobal config) =>
+        new { config.RazonSocial, config.Ruc, config.Moneda };
+
+    private static string Huella(object datos) =>
+        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(datos))).ToLowerInvariant();
+
+    // Mismos valores que usa el frontend (TipoExportacion, VistaLiquidaciones, FormatoExportacion).
+    private static string ClaveTipo(TipoReporte tipo) => tipo switch
+    {
+        TipoReporte.Honorarios => "honorarios",
+        TipoReporte.Liquidaciones => "liquidaciones",
+        _ => "colaboradores",
+    };
+
+    private static string? ClaveVista(VistaLiquidaciones? vista) => vista switch
+    {
+        VistaLiquidaciones.Consolidado => "consolidado",
+        VistaLiquidaciones.PorColaborador => "porColaborador",
+        _ => null,
+    };
+
+    private static string ClaveFormato(FormatoReporte formato) => formato == FormatoReporte.Pdf ? "pdf" : "xlsx";
+
     private record FilaHonorario(
         DateOnly Periodo, int DiasReales, int DiasReconocidos, Modalidad Modalidad, decimal ProporcionalAcordado,
         decimal Subtotal, decimal Iva, decimal TotalDocumento, decimal RetencionFuente, decimal RetencionIva,
@@ -214,7 +367,9 @@ public class ExportacionesService(RpsDbContext db)
         if (periodo is not null)
             query = query.Where(h => h.Periodo == periodo);
 
-        return await query
+        // El orden se aplica en memoria: EF Core no traduce un OrderBy sobre un record armado con constructor
+        // (FilaHonorario) y la exportación de honorarios fallaba con 500.
+        return (await query
             .Join(db.ColaboradoresRps.AsNoTracking(), h => h.ColaboradorId, c => c.Id, (h, c) => new { h, c })
             .GroupJoin(db.Proyectos.AsNoTracking(), x => x.h.ProyectoId, p => (Guid?)p.Id, (x, ps) => new { x.h, x.c, ps })
             .SelectMany(x => x.ps.DefaultIfEmpty(), (x, p) => new FilaHonorario(
@@ -222,8 +377,9 @@ public class ExportacionesService(RpsDbContext db)
                 x.h.Subtotal, x.h.Iva, x.h.TotalDocumento, x.h.RetencionFuente, x.h.RetencionIva,
                 x.h.TotalRetenciones, x.h.Neto, x.c.TmrColaboradorId, x.c.Nombres, x.c.Apellidos,
                 x.c.Identificacion, p != null ? p.Nombre : "Pago por contrato"))
+            .ToListAsync(ct))
             .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId).ThenBy(f => f.Proyecto)
-            .ToListAsync(ct);
+            .ToList();
     }
 
     private static readonly string[] MesesCortos = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];

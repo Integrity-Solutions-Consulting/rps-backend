@@ -42,8 +42,9 @@ public class AuditoriaInterceptor(IHttpContextAccessor httpContextAccessor) : Sa
 
         foreach (var entry in context.ChangeTracker.Entries())
         {
-            // La auditoría no se audita a sí misma, y las entidades sin cambios reales no generan ruido.
-            if (entry.Entity is Auditoria) continue;
+            // La auditoría no se audita a sí misma, ni las entidades que ya son un registro de autoría
+            // (ISinAuditoria); las entidades sin cambios reales no generan ruido.
+            if (entry.Entity is Auditoria or ISinAuditoria) continue;
             if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
 
             var entidad = entry.Metadata.ClrType.Name;
