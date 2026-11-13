@@ -1238,6 +1238,15 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<DateTime?>("ModificadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modificada_en");
+
+                    b.Property<string>("MotivoModificacion")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("motivo_modificacion");
+
                     b.Property<decimal>("NetoConsolidado")
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("neto_consolidado");
@@ -1257,6 +1266,10 @@ namespace rps_backend.Migrations
                     b.Property<Guid?>("RevisadoPorUsuarioId")
                         .HasColumnType("uuid")
                         .HasColumnName("revisado_por_usuario_id");
+
+                    b.Property<bool>("RevisionAnulada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("revision_anulada");
 
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()

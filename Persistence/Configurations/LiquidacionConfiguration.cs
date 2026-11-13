@@ -16,6 +16,9 @@ public class LiquidacionConfiguration : IEntityTypeConfiguration<Liquidacion>
         builder.Property(l => l.NetoConsolidado)
             .HasColumnType("numeric(12,2)");
 
+        builder.Property(l => l.MotivoModificacion)
+            .HasMaxLength(Liquidacion.LargoMaximoMotivo);
+
         builder.HasOne<ColaboradorRps>()
             .WithMany()
             .HasForeignKey(l => l.ColaboradorId)

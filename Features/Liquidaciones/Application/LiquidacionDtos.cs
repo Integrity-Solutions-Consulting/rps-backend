@@ -28,7 +28,11 @@ public record LiquidacionResponse(
     DateTime? RevisadoEn,
     Guid? RevisadoPorUsuarioId,
     DateTime CreadoEn,
-    List<CorteResponse> Cortes);
+    List<CorteResponse> Cortes,
+    // Cambió después de calculada (aviso hasta la próxima revisión). Ver Liquidacion.RegistrarModificacion.
+    DateTime? ModificadaEn,
+    string? MotivoModificacion,
+    bool RevisionAnulada);
 
 public record LiquidacionDetalleResponse(
     Guid Id,
@@ -40,4 +44,7 @@ public record LiquidacionDetalleResponse(
     Guid? RevisadoPorUsuarioId,
     DateTime CreadoEn,
     List<CorteResponse> Cortes,
-    List<HonorarioResponse> Honorarios);
+    List<HonorarioResponse> Honorarios,
+    DateTime? ModificadaEn,
+    string? MotivoModificacion,
+    bool RevisionAnulada);
