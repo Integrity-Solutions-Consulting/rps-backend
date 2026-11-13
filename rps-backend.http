@@ -345,14 +345,28 @@ Accept: application/json
 
 ### ===== Exportaciones =====
 
-### Exportar honorarios a CSV (periodo opcional)
-GET {{rps_backend_HostAddress}}/api/exportaciones/honorarios?periodo=2026-11-01
+### Las descargas son POST: además del archivo, registran la exportación en el historial.
 
-### Exportar liquidaciones a CSV (periodo opcional)
-GET {{rps_backend_HostAddress}}/api/exportaciones/liquidaciones?periodo=2026-11-01
+### Honorarios en Excel (periodo opcional: sin periodo = todos los meses; /pdf para PDF)
+POST {{rps_backend_HostAddress}}/api/exportaciones/honorarios
+Content-Type: application/json
 
-### Exportar listado de colaboradores a CSV
-GET {{rps_backend_HostAddress}}/api/exportaciones/colaboradores
+{ "periodo": "2026-11-01" }
+
+### Liquidaciones en PDF (vista: consolidado | porColaborador; sin /pdf = Excel)
+POST {{rps_backend_HostAddress}}/api/exportaciones/liquidaciones/pdf
+Content-Type: application/json
+
+{ "periodo": "2026-11-01", "vista": "consolidado" }
+
+### Colaboradores en Excel (sin periodo; /pdf para PDF)
+POST {{rps_backend_HostAddress}}/api/exportaciones/colaboradores
+
+### Historial "Exportaciones recientes" (sin periodo: las de todos los meses y colaboradores; todos=true: sin filtro)
+GET {{rps_backend_HostAddress}}/api/exportaciones/historial?periodo=2026-11-01&tipo=liquidaciones&pagina=1&tamano=20
+
+### Última exportación de cada reporte para un mes
+GET {{rps_backend_HostAddress}}/api/exportaciones/ultimas?periodo=2026-11-01
 
 ### ===== Feriados (nacionales Ecuador; ya no se usan en el cálculo de honorarios, que usa días calendario) =====
 

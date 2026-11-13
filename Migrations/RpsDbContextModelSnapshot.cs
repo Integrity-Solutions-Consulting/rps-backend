@@ -821,6 +821,79 @@ namespace rps_backend.Migrations
                     b.ToTable("contrato_proyecto", "rps");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.Exportacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Formato")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("formato");
+
+                    b.Property<DateTime>("GeneradoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generado_en");
+
+                    b.Property<Guid>("GeneradoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("generado_por_usuario_id");
+
+                    b.Property<string>("HuellaDatos")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("huella_datos")
+                        .IsFixedLength();
+
+                    b.Property<string>("NombreArchivo")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("nombre_archivo");
+
+                    b.Property<DateOnly?>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.Property<int>("Registros")
+                        .HasColumnType("integer")
+                        .HasColumnName("registros");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<decimal?>("TotalNeto")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("total_neto");
+
+                    b.Property<string>("Vista")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("vista");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exportacion_reporte");
+
+                    b.HasIndex("GeneradoEn")
+                        .HasDatabaseName("ix_exportacion_reporte_generado_en");
+
+                    b.HasIndex("GeneradoPorUsuarioId")
+                        .HasDatabaseName("ix_exportacion_reporte_generado_por_usuario_id");
+
+                    b.HasIndex("Periodo", "GeneradoEn")
+                        .HasDatabaseName("ix_exportacion_reporte_periodo_generado_en");
+
+                    b.ToTable("exportacion_reporte", "rps");
+                });
+
             modelBuilder.Entity("rps_backend.Features.Feriados.Domain.Feriado", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1459,6 +1532,16 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_contrato_proyecto_proyectos_proyecto_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Exportaciones.Domain.Exportacion", b =>
+                {
+                    b.HasOne("rps_backend.Features.Auth.Domain.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("GeneradoPorUsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_exportacion_reporte_usuarios_generado_por_usuario_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.CondicionEconomica", b =>

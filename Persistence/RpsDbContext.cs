@@ -47,6 +47,7 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
         => Set<Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey>();
     public DbSet<Auditoria> Auditorias => Set<Auditoria>();
     public DbSet<RegistroIdempotencia> RegistrosIdempotencia => Set<RegistroIdempotencia>();
+    public DbSet<rps_backend.Features.Exportaciones.Domain.Exportacion> Exportaciones => Set<rps_backend.Features.Exportaciones.Domain.Exportacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
