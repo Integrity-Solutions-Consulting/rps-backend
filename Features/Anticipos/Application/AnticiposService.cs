@@ -53,10 +53,12 @@ public class AnticiposService(RpsDbContext db)
         var mes = periodo is { Day: 1 } p ? p : new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var topes = await TopesPorCorteAsync(colaborador, config, mes, excluirAnticipoId: null, ct);
 
+        var quincenaCerrada = QuincenaCerrada(mes);
         return new ResumenAnticiposResponse(
             colaboradorId, colaborador.Activo, netoMensualCompleto, config.PorcentajeMaximoAnticipo,
             limite, saldoPendiente, Math.Max(0m, limite - saldoPendiente), mes,
-            topes.Select(t => t.Corte).ToList(), topes);
+            topes.Where(t => !(quincenaCerrada && t.Corte == TipoCorte.Quincena)).Select(t => t.Corte).ToList(),
+            topes, quincenaCerrada);
     }
 
     // RN 21, 42-43: el límite es un % (configurable) del neto mensual completo SIN prorratear
@@ -157,14 +159,37 @@ public class AnticiposService(RpsDbContext db)
         var colaborador = await db.ColaboradoresRps.AsNoTracking().FirstAsync(c => c.Id == colaboradorId, ct);
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var topes = await TopesPorCorteAsync(colaborador, config, periodoCuotas, excluirAnticipoId: anticipoId, ct);
+        var existentes = await db.CuotasRecuperacion.Where(c => c.AnticipoAdicionalId == anticipoId).ToListAsync(ct);
+
         foreach (var cuota in request.Cuotas)
         {
-            var tope = topes.First(t => t.Corte == cuota.Corte!.Value);
+            // Pasado el día 15 la quincena ya se pagó: no se le puede descontar ahí, solo de lo que
+            // le queda (fin de mes). La cuota de quincena que este anticipo ya tenía se puede dejar
+            // tal cual (ya se descontó), pero no cambiar.
+            if (cuota.Corte == TipoCorte.Quincena && QuincenaCerrada(periodoCuotas))
+            {
+                var yaDescontada = existentes.FirstOrDefault(c => c.Periodo == periodoCuotas && c.Corte == TipoCorte.Quincena);
+                if (yaDescontada is not null && yaDescontada.Importe == cuota.Importe)
+                    continue;
+                return AnticipoErrores.QuincenaYaPagada(periodoCuotas);
+            }
+
+            // Sin ese corte en el mes (p. ej. la liquidación salió solo con fin de mes, RN 26).
+            var tope = topes.FirstOrDefault(t => t.Corte == cuota.Corte!.Value);
+            if (tope is null)
+                return AnticipoErrores.CorteIncompatibleConFrecuencia;
             if (cuota.Importe!.Value > tope.Disponible)
                 return AnticipoErrores.CuotaExcedeCorte(tope.Corte, periodoCuotas, tope.ValorBase, tope.Disponible);
         }
 
-        var existentes = await db.CuotasRecuperacion.Where(c => c.AnticipoAdicionalId == anticipoId).ToListAsync(ct);
+        // Y al revés: una cuota de quincena ya pagada no se puede quitar del plan (ni moverla a
+        // otro mes), porque esa plata ya se descontó.
+        var quincenaPagadaQuitada = existentes.Any(e => e.Corte == TipoCorte.Quincena && QuincenaCerrada(e.Periodo)
+            && !request.Cuotas.Any(c => c.Periodo == e.Periodo && c.Corte == TipoCorte.Quincena && c.Importe == e.Importe));
+        if (quincenaPagadaQuitada)
+            return AnticipoErrores.QuincenaPagadaNoSeQuita;
+
+        var periodosAfectados = existentes.Select(c => c.Periodo).Append(periodoCuotas).Distinct().ToList();
         db.CuotasRecuperacion.RemoveRange(existentes);
         await db.SaveChangesAsync(ct);
 
@@ -176,6 +201,13 @@ public class AnticiposService(RpsDbContext db)
             Importe = c.Importe!.Value
         }).ToList();
         db.CuotasRecuperacion.AddRange(nuevas);
+        await db.SaveChangesAsync(ct);
+
+        // Si la liquidación del mes ya se generó (aunque ya esté revisada), el pago tiene que
+        // reflejar este anticipo: se recalculan sus cortes. También el mes del plan anterior, si
+        // el plan se movió de mes.
+        foreach (var periodoAfectado in periodosAfectados)
+            await rps_backend.Features.Liquidaciones.Application.RecuperacionEnCortes.RecalcularAsync(db, colaboradorId, periodoAfectado, ct);
         await db.SaveChangesAsync(ct);
 
         await tx.CommitAsync(ct);
@@ -208,6 +240,11 @@ public class AnticiposService(RpsDbContext db)
             .OrderByDescending(f => f.VigenteDesdeMes)
             .Select(f => (Frecuencia?)f.Frecuencia)
             .FirstOrDefaultAsync(ct) ?? Frecuencia.FinDeMes;
+
+    // La quincena de `mes` se paga el día 15: desde el 16 (hora de Ecuador) ya no se le puede
+    // descontar nada ahí. Un mes anterior al actual también la tiene cerrada.
+    private static bool QuincenaCerrada(DateOnly mes) =>
+        rps_backend.Features.Dashboard.Application.VencimientosContratosService.HoyEnEcuador() > new DateOnly(mes.Year, mes.Month, 15);
 
     private async Task<decimal> SaldoPendienteColaboradorAsync(Guid colaboradorId, CancellationToken ct)
     {
@@ -277,9 +314,26 @@ public class AnticiposService(RpsDbContext db)
         rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config,
         DateOnly mes, Guid? excluirAnticipoId, CancellationToken ct)
     {
-        var frecuencia = await FrecuenciaParaPlanAsync(colaborador.Id, mes, ct);
-        var (subtotal, neto) = await MensualCompletoAsync(colaborador, config, mes, mes, mes.AddMonths(1).AddDays(-1), ct);
-        var valores = rps_backend.Features.Liquidaciones.Domain.DistribucionCortes.MesCompleto(frecuencia, subtotal, neto);
+        // Si la liquidación del mes ya existe, se descuenta de lo que de verdad se le va a pagar en
+        // cada corte (con prorrateo por días reales); si no, de la estimación del mes completo.
+        var cortesLiquidacion = await db.Liquidaciones.AsNoTracking()
+            .Where(l => l.ColaboradorId == colaborador.Id && l.Periodo == mes)
+            .Join(db.Cortes.AsNoTracking(), l => l.Id, c => c.LiquidacionId, (l, c) => new { c.Tipo, c.ValorBase })
+            .ToListAsync(ct);
+
+        IReadOnlyDictionary<TipoCorte, decimal> valores;
+        if (cortesLiquidacion.Count > 0)
+        {
+            valores = cortesLiquidacion.GroupBy(c => c.Tipo).ToDictionary(g => g.Key, g => g.Sum(c => c.ValorBase));
+        }
+        else
+        {
+            var frecuencia = await FrecuenciaParaPlanAsync(colaborador.Id, mes, ct);
+            var (subtotal, neto) = await MensualCompletoAsync(colaborador, config, mes, mes, mes.AddMonths(1).AddDays(-1), ct);
+            valores = rps_backend.Features.Liquidaciones.Domain.DistribucionCortes.MesCompleto(frecuencia, subtotal, neto);
+        }
+
+        var quincenaCerrada = QuincenaCerrada(mes);
 
         var comprometido = (await db.CuotasRecuperacion.AsNoTracking()
                 .Where(c => c.Periodo == mes)
@@ -295,7 +349,8 @@ public class AnticiposService(RpsDbContext db)
             .Select(v =>
             {
                 var usado = comprometido.GetValueOrDefault(v.Key, 0m);
-                return new TopeCorteResponse(v.Key, v.Value, usado, Math.Max(v.Value - usado, 0m));
+                var disponible = quincenaCerrada && v.Key == TipoCorte.Quincena ? 0m : Math.Max(v.Value - usado, 0m);
+                return new TopeCorteResponse(v.Key, v.Value, usado, disponible);
             })
             .ToList();
     }

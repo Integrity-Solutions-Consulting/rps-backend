@@ -113,12 +113,14 @@ public class LiquidacionesService(RpsDbContext db)
             }
             else
             {
-                liquidacion!.NetoConsolidado = netoConsolidado;
+                var netoAnterior = liquidacion!.NetoConsolidado;
+                liquidacion.NetoConsolidado = netoConsolidado;
                 // Un honorario nuevo cambia el total: la revisión anterior ya no describe esta
                 // liquidación (equivalente de RN 49 para este caso).
-                liquidacion.Revisado = false;
-                liquidacion.RevisadoEn = null;
-                liquidacion.RevisadoPorUsuarioId = null;
+                var cultura = new System.Globalization.CultureInfo("es-EC");
+                liquidacion.RegistrarModificacion(
+                    $"Se {(grupo.Count() == 1 ? "sumó 1 honorario nuevo" : $"sumaron {grupo.Count()} honorarios nuevos")} " +
+                    $"(neto {netoAnterior.ToString("C2", cultura)} → {netoConsolidado.ToString("C2", cultura)})");
                 actualizadas++;
             }
 
@@ -144,18 +146,12 @@ public class LiquidacionesService(RpsDbContext db)
             foreach (var corte in cortesCalculados)
                 corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((grupo.Key, corte.Tipo), 0m);
 
-            // RN 47 / "saldo insuficiente por salida": la recuperación nunca deja el corte
-            // negativo, pero lo que no cupo se registra en RecuperacionNoAplicada en vez de
-            // desaparecer silenciosamente.
-            static (decimal preparado, decimal noAplicada) AplicarRecuperacion(decimal valorBase, decimal recuperacion) =>
-                (Math.Max(valorBase - recuperacion, 0m), Math.Max(recuperacion - valorBase, 0m));
-
             if (!yaExistia)
             {
                 foreach (var corte in cortesCalculados)
                 {
                     corte.LiquidacionId = liquidacion!.Id;
-                    (corte.ValorPreparado, corte.RecuperacionNoAplicada) = AplicarRecuperacion(corte.ValorBase, corte.RecuperacionAdicional);
+                    (corte.ValorPreparado, corte.RecuperacionNoAplicada) = RecuperacionEnCortes.Aplicar(corte.ValorBase, corte.RecuperacionAdicional);
                     db.Cortes.Add(corte);
                 }
             }
@@ -169,7 +165,7 @@ public class LiquidacionesService(RpsDbContext db)
                     if (existente is null)
                     {
                         calculado.LiquidacionId = liquidacion!.Id;
-                        (calculado.ValorPreparado, calculado.RecuperacionNoAplicada) = AplicarRecuperacion(calculado.ValorBase, calculado.RecuperacionAdicional);
+                        (calculado.ValorPreparado, calculado.RecuperacionNoAplicada) = RecuperacionEnCortes.Aplicar(calculado.ValorBase, calculado.RecuperacionAdicional);
                         db.Cortes.Add(calculado);
                     }
                     else
@@ -179,7 +175,7 @@ public class LiquidacionesService(RpsDbContext db)
                         existente.ValorBase = calculado.ValorBase;
                         existente.RecuperacionAdicional = calculado.RecuperacionAdicional;
                         existente.AjustePorProrrateo = calculado.AjustePorProrrateo;
-                        (existente.ValorPreparado, existente.RecuperacionNoAplicada) = AplicarRecuperacion(existente.ValorBase, existente.RecuperacionAdicional);
+                        (existente.ValorPreparado, existente.RecuperacionNoAplicada) = RecuperacionEnCortes.Aplicar(existente.ValorBase, existente.RecuperacionAdicional);
                     }
                 }
 
@@ -287,7 +283,8 @@ public class LiquidacionesService(RpsDbContext db)
 
         return new LiquidacionDetalleResponse(
             liquidacion.Id, liquidacion.ColaboradorId, liquidacion.Periodo, liquidacion.NetoConsolidado,
-            liquidacion.Revisado, liquidacion.RevisadoEn, liquidacion.RevisadoPorUsuarioId, liquidacion.CreadoEn, cortes, honorarios);
+            liquidacion.Revisado, liquidacion.RevisadoEn, liquidacion.RevisadoPorUsuarioId, liquidacion.CreadoEn, cortes, honorarios,
+            liquidacion.ModificadaEn, liquidacion.MotivoModificacion, liquidacion.RevisionAnulada);
     }
 
     // Control interno de Contabilidad previo a exportar (RN 49); no equivale a pago realizado.
@@ -297,9 +294,7 @@ public class LiquidacionesService(RpsDbContext db)
         if (liquidacion is null)
             return LiquidacionErrores.NoEncontrado(id);
 
-        liquidacion.Revisado = true;
-        liquidacion.RevisadoEn = DateTime.UtcNow;
-        liquidacion.RevisadoPorUsuarioId = usuarioId;
+        liquidacion.MarcarRevisada(usuarioId);
         await db.SaveChangesAsync(ct);
 
         var cortes = (await db.Cortes.AsNoTracking().Where(c => c.LiquidacionId == id).ToListAsync(ct))
@@ -311,5 +306,6 @@ public class LiquidacionesService(RpsDbContext db)
         c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado, c.RecuperacionNoAplicada, c.AjustePorProrrateo);
 
     private static LiquidacionResponse AResponse(Liquidacion l, List<CorteResponse> cortes) => new(
-        l.Id, l.ColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado, l.RevisadoEn, l.RevisadoPorUsuarioId, l.CreadoEn, cortes);
+        l.Id, l.ColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado, l.RevisadoEn, l.RevisadoPorUsuarioId, l.CreadoEn, cortes,
+        l.ModificadaEn, l.MotivoModificacion, l.RevisionAnulada);
 }
