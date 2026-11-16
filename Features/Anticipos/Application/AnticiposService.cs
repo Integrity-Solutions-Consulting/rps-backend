@@ -91,6 +91,17 @@ public class AnticiposService(RpsDbContext db)
         if (saldoPendiente + request.Monto > limite)
             return AnticipoErrores.ExcedeLimite(limite);
 
+        // RN 45: el anticipo se cobra completo en el pago más próximo del mes en que se registra.
+        // Quincena si el colaborador cobra en dos pagos y la quincena todavía no cerró (cierra el 16,
+        // como en RegistrarPlanAsync); si no, fin de mes. Si el monto no cabe en lo que se le puede
+        // descontar en ese corte, el anticipo no se registra. El plan se puede corregir luego con PUT .../plan.
+        var (mesCobro, corteCobro) = await PagoMasProximoAsync(colaboradorId, ct);
+        var topeCobro = (await TopesPorCorteAsync(colaborador, config, mesCobro, excluirAnticipoId: null, ct))
+            .FirstOrDefault(t => t.Corte == corteCobro);
+        var disponibleCobro = topeCobro?.Disponible ?? 0m;
+        if (request.Monto > disponibleCobro)
+            return AnticipoErrores.ExcedePagoMasProximo(corteCobro, mesCobro, topeCobro?.ValorBase ?? 0m, disponibleCobro);
+
         var observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
 
         var anticipo = new AnticipoAdicional
@@ -103,10 +114,32 @@ public class AnticiposService(RpsDbContext db)
         };
 
         db.AnticiposAdicionales.Add(anticipo);
+        db.CuotasRecuperacion.Add(new CuotaRecuperacion
+        {
+            AnticipoAdicionalId = anticipo.Id,
+            Periodo = mesCobro,
+            Corte = corteCobro,
+            Importe = request.Monto.Value
+        });
+        await db.SaveChangesAsync(ct);
+
+        // Si la liquidación del mes ya se generó, su corte tiene que reflejar la cuota nueva.
+        await rps_backend.Features.Liquidaciones.Application.RecuperacionEnCortes.RecalcularAsync(db, colaboradorId, mesCobro, ct);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
         return await AResponseAsync(anticipo, ct);
+    }
+
+    // Pago más próximo a hoy (hora de Ecuador) dentro del mes actual: la quincena si el colaborador
+    // cobra en dos pagos y todavía no cerró; si no, el fin de mes.
+    private async Task<(DateOnly Mes, TipoCorte Corte)> PagoMasProximoAsync(Guid colaboradorId, CancellationToken ct)
+    {
+        var hoy = rps_backend.Features.Dashboard.Application.VencimientosContratosService.HoyEnEcuador();
+        var mes = new DateOnly(hoy.Year, hoy.Month, 1);
+        var frecuencia = await FrecuenciaParaPlanAsync(colaboradorId, mes, ct);
+        var corte = frecuencia == Frecuencia.DosPagos && !QuincenaCerrada(mes) ? TipoCorte.Quincena : TipoCorte.FinDeMes;
+        return (mes, corte);
     }
 
     // RN 44-47: el plan reemplaza por completo al anterior (si existía); valida que la suma

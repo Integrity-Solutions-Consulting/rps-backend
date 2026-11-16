@@ -52,6 +52,19 @@ public static class AnticipoErrores
             $"En {nombreCorte} de {mes} solo se le pagan {valorBase:F2}{detalle}. No se le puede descontar más de lo que se le paga.");
     }
 
+    // Al registrar: el anticipo se cobra completo en el pago más próximo (RN 45) y no cabe ahí.
+    public static Error ExcedePagoMasProximo(TipoCorte corte, DateOnly periodo, decimal valorBase, decimal disponible)
+    {
+        var nombreCorte = corte == TipoCorte.Quincena ? "la quincena" : "el fin de mes";
+        var mes = periodo.ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-EC"));
+        var detalle = disponible < valorBase
+            ? $" (se le pagan {valorBase:F2} y otros anticipos ya tienen programados {valorBase - disponible:F2})"
+            : string.Empty;
+        return Error.Validacion(
+            "Anticipo.ExcedePagoMasProximo", "monto",
+            $"Este anticipo se cobra en {nombreCorte} de {mes} y ahí como máximo se le pueden descontar {disponible:F2}{detalle}.");
+    }
+
     public static Error QuincenaYaPagada(DateOnly periodo) =>
         Error.Validacion(
             "Anticipo.QuincenaYaPagada", "cuotas",
