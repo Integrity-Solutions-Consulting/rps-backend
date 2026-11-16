@@ -16,7 +16,7 @@ public class CondicionesEconomicasService(RpsDbContext db)
 
         var condiciones = await db.CondicionesEconomicas.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId)
-            .OrderByDescending(c => c.MesInicioVigencia)
+            .OrderByDescending(c => c.FechaInicioVigencia)
             .ToListAsync(ct);
 
         var proyectoIds = condiciones.Where(c => c.ProyectoId is not null).Select(c => c.ProyectoId!.Value).Distinct().ToList();
@@ -40,8 +40,8 @@ public class CondicionesEconomicasService(RpsDbContext db)
         if (request.Modalidad is null)
             return CondicionEconomicaErrores.ModalidadInvalida;
 
-        if (request.MesInicioVigencia is not { Day: 1 } mesInicioVigencia)
-            return CondicionEconomicaErrores.MesInicioVigenciaInvalido;
+        if (request.FechaInicioVigencia is not { } fechaInicioVigencia)
+            return CondicionEconomicaErrores.FechaInicioVigenciaInvalida;
 
         if (!await db.ColaboradoresRps.AnyAsync(c => c.Id == colaboradorId, ct))
             return CondicionEconomicaErrores.ColaboradorNoEncontrado(colaboradorId);
@@ -61,21 +61,21 @@ public class CondicionesEconomicasService(RpsDbContext db)
 
         var existente = request.ProyectoId is null
             ? await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
-                c.ContratoId == request.ContratoId && c.ProyectoId == null && c.MesInicioVigencia == mesInicioVigencia, ct)
+                c.ContratoId == request.ContratoId && c.ProyectoId == null && c.FechaInicioVigencia == fechaInicioVigencia, ct)
             : await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
-                c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId && c.MesInicioVigencia == mesInicioVigencia, ct);
+                c.ColaboradorId == colaboradorId && c.ProyectoId == request.ProyectoId && c.FechaInicioVigencia == fechaInicioVigencia, ct);
 
         var observaciones = string.IsNullOrWhiteSpace(request.Observaciones) ? null : request.Observaciones.Trim();
 
         if (existente is not null)
         {
             if (!request.Reemplazar)
-                return CondicionEconomicaErrores.MesInicioVigenciaDuplicado(mesInicioVigencia);
+                return CondicionEconomicaErrores.FechaInicioVigenciaDuplicada(fechaInicioVigencia);
 
             // Un honorario ya generado guarda el importe calculado con esta condición: cambiarla por
             // debajo dejaría ese cálculo desalineado. Primero hay que eliminar el cálculo.
             if (await db.Honorarios.AnyAsync(h => h.CondicionEconomicaId == existente.Id, ct))
-                return CondicionEconomicaErrores.YaUsadaEnHonorarios(mesInicioVigencia);
+                return CondicionEconomicaErrores.YaUsadaEnHonorarios(fechaInicioVigencia);
 
             existente.ContratoId = request.ContratoId.Value;
             existente.ImporteMensual = request.ImporteMensual.Value;
@@ -94,7 +94,7 @@ public class CondicionesEconomicasService(RpsDbContext db)
             ContratoId = request.ContratoId.Value,
             ImporteMensual = request.ImporteMensual.Value,
             Modalidad = request.Modalidad.Value,
-            MesInicioVigencia = mesInicioVigencia,
+            FechaInicioVigencia = fechaInicioVigencia,
             Observaciones = observaciones
         };
 
@@ -111,5 +111,5 @@ public class CondicionesEconomicasService(RpsDbContext db)
 
     private static CondicionEconomicaResponse AResponse(CondicionEconomica c, string? proyectoNombre) => new(
         c.Id, c.ColaboradorId, c.ProyectoId, proyectoNombre, c.ContratoId,
-        c.ImporteMensual, c.Modalidad, c.MesInicioVigencia, c.Observaciones);
+        c.ImporteMensual, c.Modalidad, c.FechaInicioVigencia, c.Observaciones);
 }

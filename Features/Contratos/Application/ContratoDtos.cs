@@ -17,7 +17,9 @@ public record EditarContratoRequest(List<Guid>? ProyectoIds, DateOnly? FechaInic
 // NuevaFechaFin: obligatoria (igual o posterior al fin vigente) salvo en contratos indefinidos,
 // donde va null. ProyectoIds: null = los proyectos no cambian; con valor, la lista completa nueva.
 // Cambios: resumen legible de lo que cambia (lo arma el formulario).
-public record CrearAdendaRequest(DateOnly? NuevaFechaFin, string? Observaciones, List<Guid>? ProyectoIds = null, string? Cambios = null);
+// FechaVigencia: desde cuándo rigen los cambios (hoy o después). Null = hoy. Al corregir una adenda se ignora.
+public record CrearAdendaRequest(DateOnly? NuevaFechaFin, string? Observaciones, List<Guid>? ProyectoIds = null, string? Cambios = null,
+    DateOnly? FechaVigencia = null);
 
 // ===== Responses =====
 
@@ -35,4 +37,5 @@ public record ContratoResponse(
     string? Observaciones,
     bool Vigente);
 
-public record AdendaResponse(Guid Id, Guid ContratoId, DateOnly? NuevaFechaFin, DateOnly FechaRegistro, string? Observaciones, string? Cambios);
+public record AdendaResponse(Guid Id, Guid ContratoId, DateOnly? NuevaFechaFin, DateOnly FechaRegistro, string? Observaciones, string? Cambios,
+    DateOnly FechaVigencia);

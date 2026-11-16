@@ -23,12 +23,12 @@ public class CondicionEconomicaConfiguration : IEntityTypeConfiguration<Condicio
         builder.HasOne<Proyecto>().WithMany().HasForeignKey(c => c.ProyectoId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Contrato>().WithMany().HasForeignKey(c => c.ContratoId).OnDelete(DeleteBehavior.Restrict);
 
-        // No se repite el mismo mes de vigencia dos veces para la misma relación colaborador-proyecto.
-        builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId, c.MesInicioVigencia }).IsUnique();
+        // No se repite la misma fecha de vigencia dos veces para la misma relación colaborador-proyecto.
+        builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId, c.FechaInicioVigencia }).IsUnique();
 
-        // Pago por contrato (sin proyecto): uno solo por contrato y mes de vigencia. El índice de
+        // Pago por contrato (sin proyecto): uno solo por contrato y fecha de vigencia. El índice de
         // arriba no lo cubre porque en PostgreSQL dos NULL nunca chocan.
-        builder.HasIndex(c => new { c.ContratoId, c.MesInicioVigencia })
+        builder.HasIndex(c => new { c.ContratoId, c.FechaInicioVigencia })
             .IsUnique()
             .HasFilter("proyecto_id IS NULL")
             .HasDatabaseName("ix_condicion_economica_por_contrato");

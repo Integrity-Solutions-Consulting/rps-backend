@@ -305,25 +305,25 @@ public class AnticiposService(RpsDbContext db)
         rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
         rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config, CancellationToken ct)
     {
-        var mesActual = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        return (await MensualCompletoAsync(colaborador, config, mesActual, hoy, hoy, ct)).Neto;
+        return (await MensualCompletoAsync(colaborador, config, hoy, hoy, hoy, ct)).Neto;
     }
 
-    // Subtotal y neto mensuales COMPLETOS (sin prorratear) de las condiciones que rigen en `mes`,
+    // Subtotal y neto mensuales COMPLETOS (sin prorratear) de las condiciones que rigen en `fecha`,
     // solo de contratos vigentes en algún momento entre `desde` y `hasta`: un solo importe por
-    // contrato (pago por contrato) o uno por proyecto.
+    // contrato (pago por contrato) o uno por proyecto. Para el tope de un mes se pasa su día 1:
+    // la misma referencia con que se arma la quincena.
     private async Task<(decimal Subtotal, decimal Neto)> MensualCompletoAsync(
         rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
         rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config,
-        DateOnly mes, DateOnly desde, DateOnly hasta, CancellationToken ct)
+        DateOnly fecha, DateOnly desde, DateOnly hasta, CancellationToken ct)
     {
         var contratosVigentes = await ContratosVigentesAsync(colaborador.Id, desde, hasta, ct);
         var condicionesVigentes = rps_backend.Features.Honorarios.Application.CondicionesVigentes.Seleccionar(
                 await db.CondicionesEconomicas.AsNoTracking()
-                    .Where(c => c.ColaboradorId == colaborador.Id && c.MesInicioVigencia <= mes)
+                    .Where(c => c.ColaboradorId == colaborador.Id && c.FechaInicioVigencia <= fecha)
                     .ToListAsync(ct),
-                mes)
+                fecha)
             .Where(c => contratosVigentes.Contains(c.ContratoId))
             .ToList();
 
