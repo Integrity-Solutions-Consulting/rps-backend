@@ -8,7 +8,8 @@ public record GenerarHonorariosRequest(DateOnly? Periodo);
 
 // ===== Responses =====
 
-public record GenerarHonorariosResponse(int Generados, int Omitidos);
+// Recalculados: ya existían y cambiaron sus días o su condición (ej. una adenda después del primer cálculo).
+public record GenerarHonorariosResponse(int Generados, int Omitidos, int Recalculados);
 
 public record HonorarioResponse(
     Guid Id,

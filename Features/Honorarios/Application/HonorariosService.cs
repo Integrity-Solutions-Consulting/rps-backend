@@ -35,7 +35,7 @@ public class HonorariosService(RpsDbContext db)
                 colaboradores.Add(candidato);
 
         if (colaboradores.Count == 0)
-            return new GenerarHonorariosResponse(0, 0);
+            return new GenerarHonorariosResponse(0, 0, 0);
 
         var colaboradorIds = colaboradores.Select(c => c.Id).ToList();
         var clasificacionPorColaborador = colaboradores.ToDictionary(c => c.Id, c => c.Clasificacion!.Value);
@@ -49,7 +49,7 @@ public class HonorariosService(RpsDbContext db)
             periodo);
 
         if (condicionesVigentes.Count == 0)
-            return new GenerarHonorariosResponse(0, 0);
+            return new GenerarHonorariosResponse(0, 0, 0);
 
         var asignaciones = await db.Asignaciones.AsNoTracking()
             .Where(a => colaboradorIds.Contains(a.ColaboradorId)
@@ -60,15 +60,17 @@ public class HonorariosService(RpsDbContext db)
 
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
 
-        var existentes = (await db.Honorarios.AsNoTracking()
+        // Los que ya existen se vuelven a contar: una adenda (o una salida en TMR) pudo cambiar los
+        // días del período después del primer cálculo.
+        var existentes = (await db.Honorarios
                 .Where(h => h.Periodo == periodo && colaboradorIds.Contains(h.ColaboradorId))
-                .Select(h => new { h.ContratoId, h.ProyectoId })
                 .ToListAsync(ct))
-            .Select(h => (h.ContratoId, h.ProyectoId))
-            .ToHashSet();
+            .GroupBy(h => (h.ContratoId, h.ProyectoId))
+            .ToDictionary(g => g.Key, g => g.First());
 
         var nuevos = new List<Honorario>();
         var omitidos = 0;
+        var recalculados = 0;
 
         // Vigencia del contrato de cada condición, con adendas (RN 10-12): fin = la mayor entre la
         // fecha fin original y las adendas; null = indefinido.
@@ -109,21 +111,57 @@ public class HonorariosService(RpsDbContext db)
 
         foreach (var condicion in condicionesVigentes)
         {
-            if (existentes.Contains((condicion.ContratoId, condicion.ProyectoId)))
-            {
-                omitidos++;
-                continue;
-            }
-
             var diasReconocidos = diasPorCondicion[condicion.Id].Count;
             var proporcionalAcordado = Math.Round(
                 condicion.ImporteMensual / diasReales * diasReconocidos, 2, MidpointRounding.AwayFromZero);
+            var generaHonorario = diasReconocidos > 0 && proporcionalAcordado > 0;
+
+            if (existentes.TryGetValue((condicion.ContratoId, condicion.ProyectoId), out var existente))
+            {
+                // Mismos días y misma condición: se deja tal cual (conserva los porcentajes con que
+                // se calculó, RN 29).
+                if (generaHonorario && existente.DiasReconocidos == diasReconocidos
+                    && existente.CondicionEconomicaId == condicion.Id && existente.DiasReales == diasReales)
+                {
+                    omitidos++;
+                    continue;
+                }
+
+                // Ya no le corresponden días en el período: se retira. LiquidacionesService
+                // recalcula su liquidación porque el total ya no cuadra.
+                if (!generaHonorario)
+                {
+                    db.Honorarios.Remove(existente);
+                    recalculados++;
+                    continue;
+                }
+
+                // Cambiaron los días o la condición: se recalcula y se suelta de la liquidación para
+                // que el siguiente paso la vuelva a consolidar con el valor nuevo.
+                Aplicar(existente, condicion, diasReconocidos, proporcionalAcordado);
+                existente.LiquidacionId = null;
+                recalculados++;
+                continue;
+            }
 
             // Pago por proyecto: un día sin asignación en ese proyecto no genera honorario (RN 24).
             // Pago por contrato: solo cuenta la vigencia del contrato.
-            if (diasReconocidos == 0 || proporcionalAcordado <= 0)
+            if (!generaHonorario)
                 continue;
 
+            var nuevo = new Honorario
+            {
+                ColaboradorId = condicion.ColaboradorId,
+                ProyectoId = condicion.ProyectoId,
+                ContratoId = condicion.ContratoId,
+                Periodo = periodo,
+            };
+            Aplicar(nuevo, condicion, diasReconocidos, proporcionalAcordado);
+            nuevos.Add(nuevo);
+        }
+
+        void Aplicar(Honorario h, CondicionEconomica condicion, int diasReconocidos, decimal proporcionalAcordado)
+        {
             var pctRetencionIva = clasificacionPorColaborador[condicion.ColaboradorId] == Clasificacion.Profesional
                 ? config.PorcentajeRetencionIvaProfesional
                 : config.PorcentajeRetencionIvaJunior;
@@ -131,37 +169,28 @@ public class HonorariosService(RpsDbContext db)
             var tributos = CalculoTributario.Calcular(
                 proporcionalAcordado, condicion.Modalidad, config.PorcentajeIva, config.PorcentajeRetencionFuente, pctRetencionIva);
 
-            nuevos.Add(new Honorario
-            {
-                ColaboradorId = condicion.ColaboradorId,
-                ProyectoId = condicion.ProyectoId,
-                ContratoId = condicion.ContratoId,
-                CondicionEconomicaId = condicion.Id,
-                Periodo = periodo,
-                DiasReales = diasReales,
-                DiasReconocidos = diasReconocidos,
-                Modalidad = condicion.Modalidad,
-                PorcentajeIva = config.PorcentajeIva,
-                PorcentajeRetencionFuente = config.PorcentajeRetencionFuente,
-                PorcentajeRetencionIva = pctRetencionIva,
-                ProporcionalAcordado = proporcionalAcordado,
-                Subtotal = tributos.Subtotal,
-                Iva = tributos.Iva,
-                TotalDocumento = tributos.TotalDocumento,
-                RetencionFuente = tributos.RetencionFuente,
-                RetencionIva = tributos.RetencionIva,
-                TotalRetenciones = tributos.TotalRetenciones,
-                Neto = tributos.Neto
-            });
+            h.CondicionEconomicaId = condicion.Id;
+            h.DiasReales = diasReales;
+            h.DiasReconocidos = diasReconocidos;
+            h.Modalidad = condicion.Modalidad;
+            h.PorcentajeIva = config.PorcentajeIva;
+            h.PorcentajeRetencionFuente = config.PorcentajeRetencionFuente;
+            h.PorcentajeRetencionIva = pctRetencionIva;
+            h.ProporcionalAcordado = proporcionalAcordado;
+            h.Subtotal = tributos.Subtotal;
+            h.Iva = tributos.Iva;
+            h.TotalDocumento = tributos.TotalDocumento;
+            h.RetencionFuente = tributos.RetencionFuente;
+            h.RetencionIva = tributos.RetencionIva;
+            h.TotalRetenciones = tributos.TotalRetenciones;
+            h.Neto = tributos.Neto;
         }
 
-        if (nuevos.Count > 0)
-        {
-            db.Honorarios.AddRange(nuevos);
+        db.Honorarios.AddRange(nuevos);
+        if (nuevos.Count > 0 || recalculados > 0)
             await db.SaveChangesAsync(ct);
-        }
 
-        return new GenerarHonorariosResponse(nuevos.Count, omitidos);
+        return new GenerarHonorariosResponse(nuevos.Count, omitidos, recalculados);
     }
 
     public async Task<List<HonorarioResponse>> ListarAsync(DateOnly? periodo, Guid? colaboradorId, CancellationToken ct)
