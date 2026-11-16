@@ -303,7 +303,10 @@ public class AnticiposService(RpsDbContext db)
 
         var calculos = condicionesVigentes.Select(c => CalculoTributario.Calcular(
             c.ImporteMensual, c.Modalidad, config.PorcentajeIva, config.PorcentajeRetencionFuente, pctRetencionIva)).ToList();
-        return (calculos.Sum(r => r.Subtotal), calculos.Sum(r => r.Neto));
+        // "Subtotal" aquí es la base de quincena: neto si la condición es modalidad Neto, subtotal si es MasIva.
+        var baseQuincena = condicionesVigentes.Zip(calculos, (c, r) =>
+            rps_backend.Features.Liquidaciones.Domain.DistribucionCortes.BaseQuincena(c.Modalidad, r)).Sum();
+        return (baseQuincena, calculos.Sum(r => r.Neto));
     }
 
     // Tope de descuento por corte del mes (misma regla que LiquidacionesService vía
