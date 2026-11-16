@@ -79,24 +79,22 @@ public class HonorariosService(RpsDbContext db)
         var omitidos = 0;
         var recalculados = 0;
 
-        // Vigencia del contrato de cada condición, con adendas (RN 10-12): fin = la mayor entre la
-        // fecha fin original y las adendas; null = indefinido.
+        // Vigencia del contrato de cada condición, con adendas (RN 10-12) y terminación: fin = la
+        // mayor entre la fecha fin original y las adendas (null = indefinido), pero nunca después del
+        // día en que se terminó por desactivación (ese día sí se paga).
         var contratoIds = condicionesVigentes.Select(c => c.ContratoId).Distinct().ToList();
         var contratos = await db.Contratos.AsNoTracking()
             .Where(c => contratoIds.Contains(c.Id))
-            .Select(c => new { c.Id, c.FechaInicio, c.FechaFin })
+            .Select(c => new { c.Id, c.FechaInicio, c.FechaFin, c.FechaTerminacion })
             .ToListAsync(ct);
         var maxAdenda = (await db.Adendas.AsNoTracking()
                 .Where(a => contratoIds.Contains(a.ContratoId))
                 .ToListAsync(ct))
             .GroupBy(a => a.ContratoId)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
-        var vigenciaContrato = contratos.ToDictionary(c => c.Id, c =>
-        {
-            DateOnly? fin = c.FechaFin is null ? null
-                : maxAdenda.TryGetValue(c.Id, out var adenda) && adenda > c.FechaFin ? adenda : c.FechaFin;
-            return (Inicio: c.FechaInicio, Fin: fin);
-        });
+        var vigenciaContrato = contratos.ToDictionary(c => c.Id, c => (
+            Inicio: c.FechaInicio,
+            Fin: Contratos.Domain.VigenciaContrato.FinEfectivo(c.FechaFin, maxAdenda.GetValueOrDefault(c.Id), c.FechaTerminacion)));
 
         // Días reconocidos de cada condición: los de su tramo, siempre dentro de la vigencia de su
         // contrato (si el contrato empieza o termina a mitad de mes, se paga el proporcional):

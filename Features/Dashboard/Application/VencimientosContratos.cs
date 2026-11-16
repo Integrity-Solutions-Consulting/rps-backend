@@ -56,9 +56,10 @@ public class VencimientosContratosService(RpsDbContext db)
             .GroupBy(a => a.ContratoId)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
-        // Indefinido (FechaFin null) nunca vence: Fin queda null y no participa de este aviso.
+        // Indefinido (FechaFin null) nunca vence: Fin queda null y no participa de este aviso, salvo
+        // que se haya terminado por desactivación.
         DateOnly? FinVigente(Contrato c) =>
-            c.FechaFin is null ? null : (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin);
+            VigenciaContrato.FinEfectivo(c.FechaFin, maxAdenda.GetValueOrDefault(c.Id), c.FechaTerminacion);
 
         var conFin = contratos.Select(c => (Contrato: c, Fin: FinVigente(c))).ToList();
 
@@ -90,7 +91,9 @@ public class VencimientosContratosService(RpsDbContext db)
 
         var elegidos = conFin.Where(x =>
         {
-            var porVencer = x.Fin is not null && x.Fin >= hoy && x.Fin <= limite;
+            // Un contrato terminado por desactivación no se avisa como "por vencer": la persona ya
+            // salió. Sí se avisa si sigue con una asignación activa en TMR (requiere revisión).
+            var porVencer = x.Fin is not null && x.Fin >= hoy && x.Fin <= limite && x.Contrato.FechaTerminacion is null;
             var vencidoTrabajando = x.Fin is not null && x.Fin < hoy
                 && !conContratoVigente.Contains(x.Contrato.ColaboradorId) && SigueTrabajando(x.Contrato);
             return porVencer || vencidoTrabajando;

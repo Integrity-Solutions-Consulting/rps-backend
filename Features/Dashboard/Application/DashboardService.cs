@@ -82,13 +82,10 @@ public class DashboardService(RpsDbContext db)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
         var hoy = HoraEcuador.Hoy;
-        // Indefinido (FechaFin null) nunca vence: no participa de este aviso.
-        var fechasFinVigente = contratos.Select(c =>
-        {
-            if (c.FechaFin is null) return (DateOnly?)null;
-            var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
-            return maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin;
-        }).ToList();
+        // Indefinido (FechaFin null) nunca vence: no participa de este aviso. Un contrato terminado por
+        // desactivación tampoco: la persona ya salió (mismo criterio que VencimientosContratos).
+        var fechasFinVigente = contratos.Where(c => c.FechaTerminacion is null).Select(c =>
+            Contratos.Domain.VigenciaContrato.FinEfectivo(c.FechaFin, maxAdendaPorContrato.GetValueOrDefault(c.Id), null)).ToList();
 
         int ContarHasta(int dias) => fechasFinVigente.Count(f => f is not null && f >= hoy && f <= hoy.AddDays(dias));
 

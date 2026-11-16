@@ -101,6 +101,10 @@ public static class ContratoErrores
     public static readonly Error ImporteCorreccionInvalido =
         Error.Validacion("Contrato.ImporteCorreccionInvalido", "honorarios", "El monto debe ser mayor a 0.");
 
+    public static Error ContratoTerminado(DateOnly fecha) =>
+        Error.Conflicto("Contrato.Terminado",
+            $"El contrato terminó el {fecha:dd/MM/yyyy} porque el colaborador se desactivó. Si se reactivó, registra un contrato nuevo.");
+
     public static Error FechaVigenciaOcupada(DateOnly fecha) =>
         Error.Conflicto("Contrato.FechaVigenciaOcupada",
             $"Ya hay otro honorario de este contrato vigente desde el {fecha:dd/MM/yyyy}. Elige otra fecha.");

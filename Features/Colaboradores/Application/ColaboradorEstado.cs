@@ -71,7 +71,7 @@ public static class ColaboradorEstado
         // adenda extendió su fecha fin (RN 10-12).
         var contratosIniciados = await db.Contratos
             .Where(c => c.ColaboradorId == colaborador.Id && c.FechaInicio <= hasta)
-            .Select(c => new { c.Id, c.FechaFin })
+            .Select(c => new { c.Id, c.FechaFin, c.FechaTerminacion })
             .ToListAsync(ct);
 
         var tieneContratoVigente = false;
@@ -84,14 +84,11 @@ public static class ColaboradorEstado
                 .GroupBy(a => a.ContratoId)
                 .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
+            // Indefinido (sin fecha de fin): vigente una vez iniciado, salvo que se haya terminado por
+            // desactivación. El mes de la terminación todavía cuenta (se paga hasta ese día).
             tieneContratoVigente = contratosIniciados.Any(c =>
-            {
-                // Indefinido (sin fecha de fin): siempre vigente una vez iniciado.
-                if (c.FechaFin is null) return true;
-                var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(c.Id);
-                var fechaFinVigente = maxAdenda > c.FechaFin ? maxAdenda : c.FechaFin.Value;
-                return fechaFinVigente >= desde;
-            });
+                Contratos.Domain.VigenciaContrato.FinEfectivo(c.FechaFin, maxAdendaPorContrato.GetValueOrDefault(c.Id), c.FechaTerminacion)
+                    is not { } fin || fin >= desde);
         }
 
         return colaborador.Clasificacion is not null && tieneFrecuencia && tieneCuentaActiva && tieneContratoVigente

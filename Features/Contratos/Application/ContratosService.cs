@@ -263,6 +263,9 @@ public class ContratosService(RpsDbContext db)
         if (contrato is null)
             return ContratoErrores.NoEncontrado(contratoId);
 
+        if (contrato.FechaTerminacion is { } terminado)
+            return ContratoErrores.ContratoTerminado(terminado);
+
         DateOnly? nuevaFechaFin = null;
         if (contrato.FechaFin is null)
         {
@@ -363,6 +366,9 @@ public class ContratosService(RpsDbContext db)
         var adenda = await db.Adendas.FirstOrDefaultAsync(a => a.Id == adendaId && a.ContratoId == contratoId, ct);
         if (adenda is null)
             return ContratoErrores.AdendaNoEncontrada(adendaId);
+
+        if (contrato.FechaTerminacion is { } terminado)
+            return ContratoErrores.ContratoTerminado(terminado);
 
         if (contrato.FechaFin is null)
         {
@@ -548,12 +554,10 @@ public class ContratosService(RpsDbContext db)
 
         foreach (var x in candidatos)
         {
-            DateOnly? finVigente = null;
-            if (x.Contrato.FechaFin is not null)
-            {
-                var maxAdenda = maxAdendaPorContrato.GetValueOrDefault(x.Contrato.Id);
-                finVigente = maxAdenda > x.Contrato.FechaFin ? maxAdenda : x.Contrato.FechaFin;
-            }
+            // Un contrato terminado (colaborador desactivado) ya no cubre sus proyectos después de
+            // la terminación: el contrato nuevo de una reactivación los puede volver a tomar.
+            var finVigente = VigenciaContrato.FinEfectivo(
+                x.Contrato.FechaFin, maxAdendaPorContrato.GetValueOrDefault(x.Contrato.Id), x.Contrato.FechaTerminacion);
 
             var seSuperponeInicio = finVigente is null || fechaInicio <= finVigente;
             var seSuperponeFin = fechaFin is null || fechaFin >= x.Contrato.FechaInicio;
@@ -586,20 +590,18 @@ public class ContratosService(RpsDbContext db)
 
         return contratos.Select(c =>
         {
-            DateOnly? fechaFinVigente = null;
-            if (c.FechaFin is not null)
-            {
-                fechaFinVigente = maxAdendaPorContrato.TryGetValue(c.Id, out var maxAdenda) && maxAdenda > c.FechaFin
-                    ? maxAdenda
-                    : c.FechaFin;
-            }
+            var fechaFinVigente = VigenciaContrato.FinEfectivo(
+                c.FechaFin, maxAdendaPorContrato.GetValueOrDefault(c.Id), c.FechaTerminacion);
 
-            var vigente = c.FechaInicio <= hoy && (fechaFinVigente is null || fechaFinVigente >= hoy);
+            // El día de la terminación todavía rige (se paga), pero el contrato ya no está vigente:
+            // la persona salió.
+            var vigente = c.FechaInicio <= hoy && (fechaFinVigente is null || fechaFinVigente >= hoy)
+                && c.FechaTerminacion is null;
 
             return new ContratoResponse(
                 c.Id, c.ColaboradorId, proyectosPorContrato.GetValueOrDefault(c.Id, []),
                 c.FechaInicio, c.FechaFin, fechaFinVigente, c.Referencia, c.Observaciones,
-                Vigente: vigente);
+                Vigente: vigente, FechaTerminacion: c.FechaTerminacion, MotivoTerminacion: c.MotivoTerminacion);
         }).ToList();
     }
 
