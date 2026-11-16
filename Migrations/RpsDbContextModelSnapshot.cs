@@ -787,6 +787,14 @@ namespace rps_backend.Migrations
                         .HasColumnType("date")
                         .HasColumnName("fecha_inicio");
 
+                    b.Property<DateOnly?>("FechaTerminacion")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_terminacion");
+
+                    b.Property<string>("MotivoTerminacion")
+                        .HasColumnType("text")
+                        .HasColumnName("motivo_terminacion");
+
                     b.Property<string>("Observaciones")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")

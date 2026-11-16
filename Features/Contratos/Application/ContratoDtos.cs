@@ -44,7 +44,10 @@ public record ContratoResponse(
     DateOnly? FechaFinVigente,
     string? Referencia,
     string? Observaciones,
-    bool Vigente);
+    bool Vigente,
+    // Terminado antes de tiempo porque el colaborador se desactivó (rige hasta ese día inclusive).
+    DateOnly? FechaTerminacion = null,
+    string? MotivoTerminacion = null);
 
 // Programada: rige desde una fecha futura (todavía no aplica). EsUltima: la que se puede corregir completa.
 public record AdendaResponse(Guid Id, Guid ContratoId, DateOnly? NuevaFechaFin, DateOnly FechaRegistro, string? Observaciones, string? Cambios,

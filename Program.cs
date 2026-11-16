@@ -110,8 +110,6 @@ builder.Services.AddEstadoInterno(builder.Configuration);
 builder.Services.AddSingleton<CuentaBancariaProtector>();
 builder.Services.AddScoped<ColaboradoresService>();
 builder.Services.AddScoped<ContratosService>();
-// Proyectos de adendas que rigen desde una fecha futura: se aplican ese día.
-builder.Services.AddHostedService<AdendasProgramadasJob>();
 builder.Services.AddScoped<ProyectosService>();
 builder.Services.AddScoped<AsignacionesService>();
 builder.Services.AddScoped<HonorariosService>();
@@ -169,6 +167,15 @@ builder.Services.AddQuartz(q =>
     q.AddTrigger(t => t
         .ForJob(recalculoKey)
         .WithCronSchedule("0 5 5 * * ?", c => c.InTimeZone(TimeZoneInfo.Utc)));
+
+    // Proyectos de adendas que rigen desde una fecha futura: al arrancar y todos los días a las
+    // 05:01 UTC (00:01 en Ecuador), antes del recálculo de estado.
+    var adendasKey = new JobKey(nameof(AdendasProgramadasJob));
+    q.AddJob<AdendasProgramadasJob>(j => j.WithIdentity(adendasKey));
+    q.AddTrigger(t => t.ForJob(adendasKey).StartNow());
+    q.AddTrigger(t => t
+        .ForJob(adendasKey)
+        .WithCronSchedule("0 1 5 * * ?", c => c.InTimeZone(TimeZoneInfo.Utc)));
 });
 builder.Services.AddQuartzHostedService(o => o.WaitForJobsToComplete = true);
 // Historial del colaborador: solo lee lo que guardan los demás módulos.

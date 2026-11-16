@@ -399,6 +399,14 @@ public class SincronizacionTmrService(
 
         colaborador.Activo = activoEnTmr;
         colaborador.ActualizadoEn = ahora;
+
+        // Desactivado = sin contratos vigentes: terminan hoy (hoy todavía se paga). Al reactivarse
+        // no se reabren: necesita un contrato nuevo.
+        if (!activoEnTmr)
+        {
+            await Contratos.Application.TerminacionContratos.TerminarPorDesactivacionAsync(db, colaborador.Id, HoraEcuador.Hoy, ct);
+            await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
+        }
     }
 
     private static CambioTmr NuevoCambio(

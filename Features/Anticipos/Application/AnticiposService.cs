@@ -428,7 +428,7 @@ public class AnticiposService(RpsDbContext db)
     {
         var contratos = await db.Contratos.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId && c.FechaInicio <= hasta)
-            .Select(c => new { c.Id, c.FechaFin })
+            .Select(c => new { c.Id, c.FechaFin, c.FechaTerminacion })
             .ToListAsync(ct);
         var ids = contratos.Select(c => c.Id).ToList();
         var maxAdenda = (await db.Adendas.AsNoTracking().Where(a => ids.Contains(a.ContratoId)).ToListAsync(ct))
@@ -436,7 +436,8 @@ public class AnticiposService(RpsDbContext db)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
         return contratos
-            .Where(c => c.FechaFin is null || (maxAdenda.TryGetValue(c.Id, out var f) && f > c.FechaFin ? f : c.FechaFin.Value) >= desde)
+            .Where(c => rps_backend.Features.Contratos.Domain.VigenciaContrato.FinEfectivo(
+                c.FechaFin, maxAdenda.GetValueOrDefault(c.Id), c.FechaTerminacion) is not { } fin || fin >= desde)
             .Select(c => c.Id)
             .ToHashSet();
     }

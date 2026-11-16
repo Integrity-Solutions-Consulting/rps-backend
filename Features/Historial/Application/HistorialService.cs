@@ -86,6 +86,11 @@ public class HistorialService(RpsDbContext db)
                     $"Adenda {numero++} en {proyecto}, desde {a.FechaVigencia:yyyy-MM-dd} hasta {(a.NuevaFechaFin is { } fin ? fin.ToString("yyyy-MM-dd") : "indefinido")}"
                         + (string.IsNullOrEmpty(a.Cambios) ? "." : $": {a.Cambios}"),
                     null, PeriodoTexto.Formato(a.FechaRegistro), null, "Registrada", enlace));
+
+            if (c.FechaTerminacion is { } terminacion)
+                eventos.Add(new(terminacion.ToDateTime(new TimeOnly(23, 59), DateTimeKind.Utc), "Contrato",
+                    $"Contrato {c.Referencia} en {proyecto} terminado el {terminacion:yyyy-MM-dd} ({c.MotivoTerminacion ?? "terminación"}). Ese día todavía se paga.",
+                    null, PeriodoTexto.Formato(terminacion), null, "Terminado", enlace));
         }
 
         // Honorarios (condiciones económicas).

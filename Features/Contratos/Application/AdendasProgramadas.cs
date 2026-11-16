@@ -70,28 +70,22 @@ public static class AdendasProgramadas
     }
 }
 
-// Aplica las adendas programadas al arrancar y después cada hora (el cambio de día en Ecuador cae
-// dentro de esa hora).
-public class AdendasProgramadasJob(IServiceScopeFactory scopes, ILogger<AdendasProgramadasJob> log) : BackgroundService
+// Aplica las adendas programadas al arrancar y todos los días a las 00:01 de Ecuador (antes del
+// recálculo de estado de las 00:05). Ver Program.cs.
+[Quartz.DisallowConcurrentExecution]
+public class AdendasProgramadasJob(RpsDbContext db, ILogger<AdendasProgramadasJob> log) : Quartz.IJob
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async ValueTask Execute(Quartz.IJobExecutionContext context, CancellationToken cancellationToken)
     {
-        using var reloj = new PeriodicTimer(TimeSpan.FromHours(1));
-        do
+        try
         {
-            try
-            {
-                using var scope = scopes.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<RpsDbContext>();
-                var aplicadas = await AdendasProgramadas.AplicarVencidasAsync(db, stoppingToken);
-                if (aplicadas > 0)
-                    log.LogInformation("Adendas programadas aplicadas: {Cantidad}", aplicadas);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                log.LogError(ex, "No se pudieron aplicar las adendas programadas");
-            }
+            var aplicadas = await AdendasProgramadas.AplicarVencidasAsync(db, cancellationToken);
+            if (aplicadas > 0)
+                log.LogInformation("Adendas programadas aplicadas: {Cantidad}", aplicadas);
         }
-        while (await reloj.WaitForNextTickAsync(stoppingToken));
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogError(ex, "No se pudieron aplicar las adendas programadas");
+        }
     }
 }
