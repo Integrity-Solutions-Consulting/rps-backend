@@ -32,10 +32,26 @@ public class LiquidacionesService(RpsDbContext db)
             .Where(h => h.Periodo == periodo && h.LiquidacionId == null)
             .ToListAsync(ct);
 
-        if (honorariosNuevos.Count == 0)
-            return new GenerarLiquidacionesResponse(0, 0, 0);
+        // Liquidaciones cuyo total ya no cuadra con sus honorarios: a uno se le retiró el honorario
+        // (ya no le corresponden días) al volver a calcular. Se recalculan aunque no haya nada nuevo.
+        var netoPorLiquidacion = await db.Honorarios.AsNoTracking()
+            .Where(h => h.Periodo == periodo && h.LiquidacionId != null)
+            .GroupBy(h => h.LiquidacionId!.Value)
+            .Select(g => new { LiquidacionId = g.Key, Neto = g.Sum(h => h.Neto) })
+            .ToDictionaryAsync(x => x.LiquidacionId, x => x.Neto, ct);
+        var colaboradoresDescuadrados = (await db.Liquidaciones.AsNoTracking()
+                .Where(l => l.Periodo == periodo)
+                .Select(l => new { l.Id, l.ColaboradorId, l.NetoConsolidado })
+                .ToListAsync(ct))
+            .Where(l => netoPorLiquidacion.GetValueOrDefault(l.Id, 0m) != l.NetoConsolidado)
+            .Select(l => l.ColaboradorId);
 
-        var colaboradorIds = honorariosNuevos.Select(h => h.ColaboradorId).Distinct().ToList();
+        var colaboradorIds = honorariosNuevos.Select(h => h.ColaboradorId)
+            .Concat(colaboradoresDescuadrados)
+            .Distinct().ToList();
+
+        if (colaboradorIds.Count == 0)
+            return new GenerarLiquidacionesResponse(0, 0, 0);
 
         var liquidacionesExistentes = await db.Liquidaciones
             .Where(l => l.Periodo == periodo && colaboradorIds.Contains(l.ColaboradorId))
@@ -57,6 +73,9 @@ public class LiquidacionesService(RpsDbContext db)
                 .Where(c => colaboradorIds.Contains(c.ColaboradorId))
                 .ToListAsync(ct))
             .ToDictionary(c => c.Id);
+
+        if (honorariosNuevos.Count == 0 && liquidacionesExistentes.Count == 0)
+            return new GenerarLiquidacionesResponse(0, 0, 0);
 
         var proyectoIds = honorariosNuevos.Concat(honorariosPrevios).Where(h => h.ProyectoId is not null).Select(h => h.ProyectoId!.Value).Distinct().ToList();
         var asignaciones = await db.Asignaciones.AsNoTracking()
@@ -98,17 +117,18 @@ public class LiquidacionesService(RpsDbContext db)
 
         var generadas = 0;
         var actualizadas = 0;
-        foreach (var grupo in honorariosNuevos.GroupBy(h => h.ColaboradorId))
+        foreach (var colaboradorId in colaboradorIds)
         {
-            var previosDelColaborador = honorariosPrevios.Where(h => h.ColaboradorId == grupo.Key).ToList();
-            var yaExistia = liquidacionesExistentes.TryGetValue(grupo.Key, out var liquidacion);
+            var grupo = honorariosNuevos.Where(h => h.ColaboradorId == colaboradorId).ToList();
+            var previosDelColaborador = honorariosPrevios.Where(h => h.ColaboradorId == colaboradorId).ToList();
+            var yaExistia = liquidacionesExistentes.TryGetValue(colaboradorId, out var liquidacion);
 
             var netoConsolidado = previosDelColaborador.Sum(h => h.Neto) + grupo.Sum(h => h.Neto);
             var baseQuincenaMensual = BaseQuincenaMensualDe(previosDelColaborador.Concat(grupo));
 
             if (!yaExistia)
             {
-                liquidacion = new Liquidacion { ColaboradorId = grupo.Key, Periodo = periodo, NetoConsolidado = netoConsolidado };
+                liquidacion = new Liquidacion { ColaboradorId = colaboradorId, Periodo = periodo, NetoConsolidado = netoConsolidado };
                 db.Liquidaciones.Add(liquidacion);
                 generadas++;
             }
@@ -116,25 +136,28 @@ public class LiquidacionesService(RpsDbContext db)
             {
                 var netoAnterior = liquidacion!.NetoConsolidado;
                 liquidacion.NetoConsolidado = netoConsolidado;
-                // Un honorario nuevo cambia el total: la revisión anterior ya no describe esta
-                // liquidación (equivalente de RN 49 para este caso).
-                var cultura = new System.Globalization.CultureInfo("es-EC");
-                liquidacion.RegistrarModificacion(
-                    $"Se {(grupo.Count() == 1 ? "sumó 1 honorario nuevo" : $"sumaron {grupo.Count()} honorarios nuevos")} " +
-                    $"(neto {netoAnterior.ToString("C2", cultura)} → {netoConsolidado.ToString("C2", cultura)})");
+                // Cambió el total (honorario nuevo, o días distintos por una adenda o una salida):
+                // la revisión anterior ya no describe esta liquidación (equivalente de RN 49).
+                if (netoAnterior != netoConsolidado)
+                {
+                    var cultura = new System.Globalization.CultureInfo("es-EC");
+                    liquidacion.RegistrarModificacion(
+                        $"Se volvió a calcular con los datos actuales del contrato " +
+                        $"(neto {netoAnterior.ToString("C2", cultura)} → {netoConsolidado.ToString("C2", cultura)})");
+                }
                 actualizadas++;
             }
 
             foreach (var honorario in grupo)
                 honorario.LiquidacionId = liquidacion!.Id;
 
-            var frecuencia = frecuenciaPorColaborador.GetValueOrDefault(grupo.Key, Frecuencia.FinDeMes);
+            var frecuencia = frecuenciaPorColaborador.GetValueOrDefault(colaboradorId, Frecuencia.FinDeMes);
             // Desde cuándo trabajó en el período: por proyecto, la entrada a la asignación; por
             // contrato, el inicio del contrato (los proyectos no cuentan). Sirve para RN 26.
             var honorariosDelColaborador = previosDelColaborador.Concat(grupo).ToList();
             var proyectosDelColaborador = honorariosDelColaborador.Where(h => h.ProyectoId is not null).Select(h => h.ProyectoId!.Value).ToHashSet();
             var inicios = asignaciones
-                .Where(a => a.ColaboradorId == grupo.Key && proyectosDelColaborador.Contains(a.ProyectoId))
+                .Where(a => a.ColaboradorId == colaboradorId &&proyectosDelColaborador.Contains(a.ProyectoId))
                 .Select(a => a.FechaInicio)
                 .Concat(honorariosDelColaborador.Where(h => h.ProyectoId is null)
                     .Select(h => inicioContrato.GetValueOrDefault(h.ContratoId, periodo)))
@@ -145,7 +168,7 @@ public class LiquidacionesService(RpsDbContext db)
             var cortesCalculados = ConstruirCortes(frecuencia, netoConsolidado, baseQuincenaMensual, inicioEfectivo, dia15);
 
             foreach (var corte in cortesCalculados)
-                corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((grupo.Key, corte.Tipo), 0m);
+                corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((colaboradorId, corte.Tipo), 0m);
 
             if (!yaExistia)
             {
