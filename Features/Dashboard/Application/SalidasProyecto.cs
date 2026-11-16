@@ -41,9 +41,9 @@ public class SalidasProyectoService(RpsDbContext db)
         // Lo que rige hoy: solo cuentan los proyectos con honorario propio (pago por proyecto).
         var porProyecto = CondicionesVigentes.Seleccionar(
                 await db.CondicionesEconomicas.AsNoTracking()
-                    .Where(c => colaboradorIds.Contains(c.ColaboradorId) && c.MesInicioVigencia <= mesActual)
+                    .Where(c => colaboradorIds.Contains(c.ColaboradorId) && c.FechaInicioVigencia <= hoy)
                     .ToListAsync(ct),
-                mesActual)
+                hoy)
             .Where(c => c.ProyectoId is not null)
             .GroupBy(c => (c.ColaboradorId, c.ProyectoId!.Value))
             .ToDictionary(g => g.Key, g => g.First().ContratoId);

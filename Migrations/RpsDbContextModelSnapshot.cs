@@ -726,6 +726,10 @@ namespace rps_backend.Migrations
                         .HasColumnType("date")
                         .HasColumnName("fecha_registro");
 
+                    b.Property<DateOnly>("FechaVigencia")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_vigencia");
+
                     b.Property<DateOnly?>("NuevaFechaFin")
                         .HasColumnType("date")
                         .HasColumnName("nueva_fecha_fin");
@@ -944,13 +948,13 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<DateOnly>("FechaInicioVigencia")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha_inicio_vigencia");
+
                     b.Property<decimal>("ImporteMensual")
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("importe_mensual");
-
-                    b.Property<DateOnly>("MesInicioVigencia")
-                        .HasColumnType("date")
-                        .HasColumnName("mes_inicio_vigencia");
 
                     b.Property<string>("Modalidad")
                         .IsRequired()
@@ -973,14 +977,14 @@ namespace rps_backend.Migrations
                     b.HasIndex("ProyectoId")
                         .HasDatabaseName("ix_condicion_economica_proyecto_id");
 
-                    b.HasIndex("ContratoId", "MesInicioVigencia")
+                    b.HasIndex("ContratoId", "FechaInicioVigencia")
                         .IsUnique()
                         .HasDatabaseName("ix_condicion_economica_por_contrato")
                         .HasFilter("proyecto_id IS NULL");
 
-                    b.HasIndex("ColaboradorId", "ProyectoId", "MesInicioVigencia")
+                    b.HasIndex("ColaboradorId", "ProyectoId", "FechaInicioVigencia")
                         .IsUnique()
-                        .HasDatabaseName("ix_condicion_economica_colaborador_id_proyecto_id_mes_inicio_v");
+                        .HasDatabaseName("ix_condicion_economica_colaborador_id_proyecto_id_fecha_inicio");
 
                     b.ToTable("condicion_economica", "rps");
                 });
@@ -1090,14 +1094,14 @@ namespace rps_backend.Migrations
                     b.HasIndex("ProyectoId")
                         .HasDatabaseName("ix_honorario_proyecto_id");
 
-                    b.HasIndex("ContratoId", "Periodo")
+                    b.HasIndex("ContratoId", "Periodo", "CondicionEconomicaId")
                         .IsUnique()
                         .HasDatabaseName("ix_honorario_por_contrato")
                         .HasFilter("proyecto_id IS NULL");
 
-                    b.HasIndex("ColaboradorId", "ProyectoId", "ContratoId", "Periodo")
+                    b.HasIndex("ColaboradorId", "ProyectoId", "ContratoId", "Periodo", "CondicionEconomicaId")
                         .IsUnique()
-                        .HasDatabaseName("ix_honorario_colaborador_id_proyecto_id_contrato_id_periodo");
+                        .HasDatabaseName("ix_honorario_colaborador_id_proyecto_id_contrato_id_periodo_co");
 
                     b.ToTable("honorario", "rps");
                 });

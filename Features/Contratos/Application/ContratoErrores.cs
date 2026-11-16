@@ -74,4 +74,10 @@ public static class ContratoErrores
 
     public static readonly Error NuevaFechaFinInvalida =
         Error.Validacion("Contrato.NuevaFechaFinInvalida", "nuevaFechaFin", "Es obligatoria y no puede ser anterior a la fecha de fin vigente actual.");
+
+    public static readonly Error FechaVigenciaAnterior =
+        Error.Validacion("Contrato.FechaVigenciaAnterior", "fechaVigencia", "No puede ser anterior a hoy.");
+
+    public static readonly Error FechaVigenciaFueraDelContrato =
+        Error.Validacion("Contrato.FechaVigenciaFueraDelContrato", "fechaVigencia", "Debe estar entre el inicio del contrato y su fecha de fin.");
 }

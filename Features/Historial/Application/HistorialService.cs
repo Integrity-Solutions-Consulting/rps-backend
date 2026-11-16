@@ -83,13 +83,13 @@ public class HistorialService(RpsDbContext db)
             var numero = 1;
             foreach (var a in adendas.Where(x => x.ContratoId == c.Id).OrderBy(x => x.CreadoEn))
                 eventos.Add(new(a.CreadoEn, "Adenda",
-                    $"Adenda {numero++} en {proyecto}, desde {a.FechaRegistro:yyyy-MM-dd} hasta {(a.NuevaFechaFin is { } fin ? fin.ToString("yyyy-MM-dd") : "indefinido")}"
+                    $"Adenda {numero++} en {proyecto}, desde {a.FechaVigencia:yyyy-MM-dd} hasta {(a.NuevaFechaFin is { } fin ? fin.ToString("yyyy-MM-dd") : "indefinido")}"
                         + (string.IsNullOrEmpty(a.Cambios) ? "." : $": {a.Cambios}"),
                     null, PeriodoTexto.Formato(a.FechaRegistro), null, "Registrada", enlace));
         }
 
         // Honorarios (condiciones económicas).
-        var mesActual = new DateOnly(DateTime.Now.Year, DateTime.Now.Month, 1);
+        var hoy = DateOnly.FromDateTime(DateTime.Now);
         var condiciones = await db.CondicionesEconomicas.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId).ToListAsync(ct);
         foreach (var c in condiciones)
@@ -98,9 +98,9 @@ public class HistorialService(RpsDbContext db)
                 ? proyectos.GetValueOrDefault(proyectoId, "Proyecto")
                 : "pago por contrato";
             var modalidad = c.Modalidad == Modalidad.Neto ? "neto" : "más IVA";
-            eventos.Add(new(c.CreadoEn, "Honorario", $"Cambio de honorario · {proyecto}: ${c.ImporteMensual:0.00} {modalidad} desde {PeriodoTexto.Formato(c.MesInicioVigencia)}.",
-                null, PeriodoTexto.Formato(c.MesInicioVigencia), c.ImporteMensual,
-                c.MesInicioVigencia > mesActual ? "Programado" : "Registrado", Condiciones()));
+            eventos.Add(new(c.CreadoEn, "Honorario", $"Cambio de honorario · {proyecto}: ${c.ImporteMensual:0.00} {modalidad} desde el {c.FechaInicioVigencia:dd/MM/yyyy}.",
+                null, PeriodoTexto.Formato(c.FechaInicioVigencia), c.ImporteMensual,
+                c.FechaInicioVigencia > hoy ? "Programado" : "Registrado", Condiciones()));
         }
 
         // Liquidaciones: cálculo y revisión (RN 49: revisar no es pagar).

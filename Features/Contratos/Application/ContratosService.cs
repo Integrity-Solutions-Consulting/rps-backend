@@ -220,14 +220,14 @@ public class ContratosService(RpsDbContext db)
         return await db.Adendas.AsNoTracking()
             .Where(a => a.ContratoId == contratoId)
             .OrderByDescending(a => a.FechaRegistro)
-            .Select(a => new AdendaResponse(a.Id, a.ContratoId, a.NuevaFechaFin, a.FechaRegistro, a.Observaciones, a.Cambios))
+            .Select(a => new AdendaResponse(a.Id, a.ContratoId, a.NuevaFechaFin, a.FechaRegistro, a.Observaciones, a.Cambios, a.FechaVigencia))
             .ToListAsync(ct);
     }
 
-    // Una adenda registra un cambio del contrato que rige desde hoy hasta la nueva fecha de fin:
-    // la fecha de fin (igual o posterior a la vigente; null en indefinidos), los proyectos (lista
-    // completa nueva) y un resumen de lo que cambió. Los cambios de honorario los registra el
-    // formulario como CondicionEconomica (RN 19: desde el mes siguiente).
+    // Una adenda registra un cambio del contrato que rige desde FechaVigencia (hoy o una fecha
+    // futura) hasta la nueva fecha de fin: la fecha de fin (igual o posterior a la vigente; null en
+    // indefinidos), los proyectos (lista completa nueva) y un resumen de lo que cambió. Los cambios
+    // de honorario los registra el formulario como CondicionEconomica vigente desde esa misma fecha.
     public async Task<Resultado<AdendaResponse>> RegistrarAdendaAsync(
         Guid colaboradorId, Guid contratoId, CrearAdendaRequest request, CancellationToken ct)
     {
@@ -263,6 +263,14 @@ public class ContratosService(RpsDbContext db)
             nuevaFechaFin = request.NuevaFechaFin;
         }
 
+        // Desde cuándo rige: hoy o una fecha futura, dentro de la vigencia del contrato.
+        var hoy = Hoy();
+        var fechaVigencia = request.FechaVigencia ?? hoy;
+        if (fechaVigencia < hoy)
+            return ContratoErrores.FechaVigenciaAnterior;
+        if (fechaVigencia < contrato.FechaInicio || (nuevaFechaFin ?? contrato.FechaFin) is { } finAdenda && fechaVigencia > finAdenda)
+            return ContratoErrores.FechaVigenciaFueraDelContrato;
+
         List<Guid>? proyectoIds = null;
         if (request.ProyectoIds is not null)
         {
@@ -279,7 +287,8 @@ public class ContratosService(RpsDbContext db)
         {
             ContratoId = contratoId,
             NuevaFechaFin = nuevaFechaFin,
-            FechaRegistro = Hoy(),
+            FechaRegistro = hoy,
+            FechaVigencia = fechaVigencia,
             Cambios = string.IsNullOrEmpty(cambios) ? null : cambios,
             Observaciones = string.IsNullOrEmpty(observaciones) ? null : observaciones
         };
@@ -298,7 +307,7 @@ public class ContratosService(RpsDbContext db)
 
         await tx.CommitAsync(ct);
 
-        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones, adenda.Cambios);
+        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones, adenda.Cambios, adenda.FechaVigencia);
     }
 
     // Permite corregir una adenda ya registrada (ej. se escribió mal la fecha): la nueva fecha debe
@@ -348,7 +357,7 @@ public class ContratosService(RpsDbContext db)
 
         await tx.CommitAsync(ct);
 
-        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones, adenda.Cambios);
+        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones, adenda.Cambios, adenda.FechaVigencia);
     }
 
     // Proyectos que existen, están activos y no los cubre otro contrato del colaborador en fechas superpuestas.
@@ -392,8 +401,8 @@ public class ContratosService(RpsDbContext db)
         if (condiciones.Count == 0)
             return true;
 
-        var ultimoMes = condiciones.Max(c => c.MesInicioVigencia);
-        return Honorarios.Application.CondicionesVigentes.Seleccionar(condiciones, ultimoMes).Any(c => c.PorContrato);
+        var ultimaFecha = condiciones.Max(c => c.FechaInicioVigencia);
+        return Honorarios.Application.CondicionesVigentes.Seleccionar(condiciones, ultimaFecha).Any(c => c.PorContrato);
     }
 
     // Solo se llama con contratos que no son indefinidos (se valida antes en Registrar/EditarAdendaAsync).

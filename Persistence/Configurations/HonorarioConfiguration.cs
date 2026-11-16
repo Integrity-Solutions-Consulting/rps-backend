@@ -40,11 +40,12 @@ public class HonorarioConfiguration : IEntityTypeConfiguration<Honorario>
 
         // Hace que generar un período sea idempotente: no se puede duplicar el honorario de un proyecto.
         // Por contrato: si un proyecto pasa de un contrato a otro en el mismo mes, cada contrato
-        // paga sus días con su propio honorario.
-        builder.HasIndex(h => new { h.ColaboradorId, h.ProyectoId, h.ContratoId, h.Periodo }).IsUnique();
+        // paga sus días con su propio honorario. Por condición: si el monto cambia a mitad de mes,
+        // ese mes tiene un honorario por tramo.
+        builder.HasIndex(h => new { h.ColaboradorId, h.ProyectoId, h.ContratoId, h.Periodo, h.CondicionEconomicaId }).IsUnique();
 
-        // Pago por contrato (sin proyecto): uno por contrato y período.
-        builder.HasIndex(h => new { h.ContratoId, h.Periodo })
+        // Pago por contrato (sin proyecto): uno por contrato, período y tramo.
+        builder.HasIndex(h => new { h.ContratoId, h.Periodo, h.CondicionEconomicaId })
             .IsUnique()
             .HasFilter("proyecto_id IS NULL")
             .HasDatabaseName("ix_honorario_por_contrato");

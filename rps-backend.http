@@ -193,7 +193,7 @@ Content-Type: application/json
   "contratoId": "{{contratoId}}",
   "importeMensual": 600.00,
   "modalidad": "Neto",
-  "mesInicioVigencia": "2026-10-01",
+  "fechaInicioVigencia": "2026-10-01",
   "observaciones": null
 }
 

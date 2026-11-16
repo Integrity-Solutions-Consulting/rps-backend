@@ -2,8 +2,10 @@ using rps_backend.Shared;
 
 namespace rps_backend.Features.Honorarios.Domain;
 
-// Honorario mensual fijo acordado (RN 17-20). Cambia desde un mes hacia adelante; se conserva el
-// historial via MesInicioVigencia. Dos modos de pago por contrato (ver CondicionesVigentes):
+// Honorario mensual fijo acordado (RN 17-20). Rige desde FechaInicioVigencia (cualquier día) hasta
+// que empieza la siguiente; se conserva el historial. Si cambia a mitad de mes, ese mes se paga en
+// tramos: cada uno con sus días y su importe (ver CondicionesVigentes.TramosDelPeriodo).
+// Dos modos de pago por contrato (ver CondicionesVigentes):
 //  - por proyecto: ProyectoId con valor, un importe por cada proyecto del contrato;
 //  - por contrato: ProyectoId null, un solo importe fijo para todo el contrato, tenga los
 //    proyectos que tenga (o ninguno).
@@ -21,7 +23,7 @@ public class CondicionEconomica
 
     public Modalidad Modalidad { get; set; }
 
-    public DateOnly MesInicioVigencia { get; set; }
+    public DateOnly FechaInicioVigencia { get; set; }
 
     public string? Observaciones { get; set; }
 

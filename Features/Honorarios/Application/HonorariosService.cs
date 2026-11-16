@@ -40,16 +40,15 @@ public class HonorariosService(RpsDbContext db)
         var colaboradorIds = colaboradores.Select(c => c.Id).ToList();
         var clasificacionPorColaborador = colaboradores.ToDictionary(c => c.Id, c => c.Clasificacion!.Value);
 
-        // Lo que rige en el período en cada contrato: un solo importe (pago por contrato) o uno por
-        // proyecto (pago por proyecto). Ver CondicionesVigentes.
-        var condicionesVigentes = CondicionesVigentes.Seleccionar(
+        // Lo que rige cada día del período en cada contrato: un solo importe (pago por contrato) o uno
+        // por proyecto (pago por proyecto). Si cambia a mitad de mes, cada condición se lleva sus
+        // días (un honorario por tramo). Ver CondicionesVigentes.
+        var tramos = CondicionesVigentes.TramosDelPeriodo(
             await db.CondicionesEconomicas.AsNoTracking()
-                .Where(c => colaboradorIds.Contains(c.ColaboradorId) && c.MesInicioVigencia <= periodo)
+                .Where(c => colaboradorIds.Contains(c.ColaboradorId) && c.FechaInicioVigencia <= finPeriodo)
                 .ToListAsync(ct),
-            periodo);
-
-        if (condicionesVigentes.Count == 0)
-            return new GenerarHonorariosResponse(0, 0, 0);
+            periodo, finPeriodo);
+        var condicionesVigentes = tramos.Keys.ToList();
 
         var asignaciones = await db.Asignaciones.AsNoTracking()
             .Where(a => colaboradorIds.Contains(a.ColaboradorId)
@@ -61,11 +60,11 @@ public class HonorariosService(RpsDbContext db)
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
 
         // Los que ya existen se vuelven a contar: una adenda (o una salida en TMR) pudo cambiar los
-        // días del período después del primer cálculo.
+        // días o el monto del período después del primer cálculo.
         var existentes = (await db.Honorarios
                 .Where(h => h.Periodo == periodo && colaboradorIds.Contains(h.ColaboradorId))
                 .ToListAsync(ct))
-            .GroupBy(h => (h.ContratoId, h.ProyectoId))
+            .GroupBy(h => (h.ContratoId, h.ProyectoId, h.CondicionEconomicaId))
             .ToDictionary(g => g.Key, g => g.First());
 
         var nuevos = new List<Honorario>();
@@ -91,8 +90,8 @@ public class HonorariosService(RpsDbContext db)
             return (Inicio: c.FechaInicio, Fin: fin);
         });
 
-        // Días reconocidos de cada condición, siempre dentro de la vigencia de su contrato (si el
-        // contrato empieza o termina a mitad de mes, se paga el proporcional):
+        // Días reconocidos de cada condición: los de su tramo, siempre dentro de la vigencia de su
+        // contrato (si el contrato empieza o termina a mitad de mes, se paga el proporcional):
         //  - pago por contrato: todos los días del contrato, sin importar los proyectos;
         //  - pago por proyecto: solo los días de la asignación en ese proyecto (desde que entra
         //    hasta que sale), aunque el contrato siga.
@@ -104,10 +103,20 @@ public class HonorariosService(RpsDbContext db)
                     ? Rango(periodo, finPeriodo)
                     : DiasDeAsignaciones(
                         asignaciones.Where(a => a.ColaboradorId == c.ColaboradorId && a.ProyectoId == c.ProyectoId), periodo, finPeriodo);
+                dias.IntersectWith(tramos[c]);
                 if (vigenciaContrato.TryGetValue(c.ContratoId, out var v))
                     dias.RemoveWhere(d => d < v.Inicio || (v.Fin is { } fin && d > fin));
                 return dias;
             });
+
+        // Honorarios ya generados cuyo tramo ya no rige (ej. se reemplazó la condición): se retiran
+        // y LiquidacionesService recalcula su liquidación porque el total ya no cuadra.
+        var vigentesIds = condicionesVigentes.Select(c => c.Id).ToHashSet();
+        foreach (var huerfano in existentes.Values.Where(h => !vigentesIds.Contains(h.CondicionEconomicaId)))
+        {
+            db.Honorarios.Remove(huerfano);
+            recalculados++;
+        }
 
         foreach (var condicion in condicionesVigentes)
         {
@@ -116,12 +125,11 @@ public class HonorariosService(RpsDbContext db)
                 condicion.ImporteMensual / diasReales * diasReconocidos, 2, MidpointRounding.AwayFromZero);
             var generaHonorario = diasReconocidos > 0 && proporcionalAcordado > 0;
 
-            if (existentes.TryGetValue((condicion.ContratoId, condicion.ProyectoId), out var existente))
+            if (existentes.TryGetValue((condicion.ContratoId, condicion.ProyectoId, condicion.Id), out var existente))
             {
-                // Mismos días y misma condición: se deja tal cual (conserva los porcentajes con que
+                // Mismos días en el mismo tramo: se deja tal cual (conserva los porcentajes con que
                 // se calculó, RN 29).
-                if (generaHonorario && existente.DiasReconocidos == diasReconocidos
-                    && existente.CondicionEconomicaId == condicion.Id && existente.DiasReales == diasReales)
+                if (generaHonorario && existente.DiasReconocidos == diasReconocidos && existente.DiasReales == diasReales)
                 {
                     omitidos++;
                     continue;
@@ -136,7 +144,7 @@ public class HonorariosService(RpsDbContext db)
                     continue;
                 }
 
-                // Cambiaron los días o la condición: se recalcula y se suelta de la liquidación para
+                // Cambiaron los días del tramo: se recalcula y se suelta de la liquidación para
                 // que el siguiente paso la vuelva a consolidar con el valor nuevo.
                 Aplicar(existente, condicion, diasReconocidos, proporcionalAcordado);
                 existente.LiquidacionId = null;
