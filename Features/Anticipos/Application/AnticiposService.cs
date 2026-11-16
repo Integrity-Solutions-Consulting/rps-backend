@@ -50,7 +50,7 @@ public class AnticiposService(RpsDbContext db)
         var limite = Math.Round(netoMensualCompleto * config.PorcentajeMaximoAnticipo / 100, 2, MidpointRounding.AwayFromZero);
         var saldoPendiente = await SaldoPendienteColaboradorAsync(colaboradorId, ct);
 
-        var mes = periodo is { Day: 1 } p ? p : new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var mes = periodo is { Day: 1 } p ? p : HoraEcuador.MesActual;
         var topes = await TopesPorCorteAsync(colaborador, config, mes, excluirAnticipoId: null, ct);
 
         var quincenaCerrada = QuincenaCerrada(mes);
@@ -108,7 +108,7 @@ public class AnticiposService(RpsDbContext db)
         {
             ColaboradorId = colaboradorId,
             Monto = request.Monto.Value,
-            Fecha = DateOnly.FromDateTime(DateTime.UtcNow),
+            Fecha = HoraEcuador.Hoy,
             Observaciones = observaciones,
             CreadoPor = usuarioId
         };
@@ -305,7 +305,7 @@ public class AnticiposService(RpsDbContext db)
         rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
         rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config, CancellationToken ct)
     {
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hoy = HoraEcuador.Hoy;
         return (await MensualCompletoAsync(colaborador, config, hoy, hoy, hoy, ct)).Neto;
     }
 
@@ -342,6 +342,32 @@ public class AnticiposService(RpsDbContext db)
         return (baseQuincena, calculos.Sum(r => r.Neto));
     }
 
+    // Neto del mes completo con los tramos que rigen en él (mismo cálculo que HonorariosService, sin
+    // descontar días por inicio o salida: es la estimación del mes trabajado completo).
+    private async Task<decimal> NetoDelMesEnTramosAsync(
+        rps_backend.Features.Colaboradores.Domain.ColaboradorRps colaborador,
+        rps_backend.Features.Configuracion.Domain.ConfiguracionGlobal config,
+        DateOnly mes, DateOnly finMes, CancellationToken ct)
+    {
+        var contratosVigentes = await ContratosVigentesAsync(colaborador.Id, mes, finMes, ct);
+        var condiciones = (await db.CondicionesEconomicas.AsNoTracking()
+                .Where(c => c.ColaboradorId == colaborador.Id && c.FechaInicioVigencia <= finMes)
+                .ToListAsync(ct))
+            .Where(c => contratosVigentes.Contains(c.ContratoId));
+
+        var pctRetencionIva = colaborador.Clasificacion == Clasificacion.Profesional
+            ? config.PorcentajeRetencionIvaProfesional
+            : config.PorcentajeRetencionIvaJunior;
+        var diasDelMes = finMes.Day;
+
+        return CondicionesVigentes.TramosDelPeriodo(condiciones, mes, finMes).Sum(tramo =>
+        {
+            var proporcional = Math.Round(tramo.Key.ImporteMensual / diasDelMes * tramo.Value.Count, 2, MidpointRounding.AwayFromZero);
+            return CalculoTributario.Calcular(
+                proporcional, tramo.Key.Modalidad, config.PorcentajeIva, config.PorcentajeRetencionFuente, pctRetencionIva).Neto;
+        });
+    }
+
     // Tope de descuento por corte del mes (misma regla que LiquidacionesService vía
     // DistribucionCortes), menos lo ya programado por sus otros anticipos en ese mes y corte.
     // `excluirAnticipoId`: el anticipo cuyo plan se está reemplazando no cuenta como comprometido.
@@ -364,9 +390,14 @@ public class AnticiposService(RpsDbContext db)
         }
         else
         {
+            // Misma regla que LiquidacionesService: la quincena con lo que rige el día 1 y el fin de
+            // mes con el neto del mes en tramos (si el monto cambia a mitad de mes, cada tramo con
+            // sus días). Así el tope cuadra con lo que después calcula la liquidación.
             var frecuencia = await FrecuenciaParaPlanAsync(colaborador.Id, mes, ct);
-            var (subtotal, neto) = await MensualCompletoAsync(colaborador, config, mes, mes, mes.AddMonths(1).AddDays(-1), ct);
-            valores = rps_backend.Features.Liquidaciones.Domain.DistribucionCortes.MesCompleto(frecuencia, subtotal, neto);
+            var finMes = mes.AddMonths(1).AddDays(-1);
+            var (baseQuincena, _) = await MensualCompletoAsync(colaborador, config, mes, mes, finMes, ct);
+            var netoDelMes = await NetoDelMesEnTramosAsync(colaborador, config, mes, finMes, ct);
+            valores = rps_backend.Features.Liquidaciones.Domain.DistribucionCortes.MesCompleto(frecuencia, baseQuincena, netoDelMes);
         }
 
         var quincenaCerrada = QuincenaCerrada(mes);

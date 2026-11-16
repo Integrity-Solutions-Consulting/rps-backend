@@ -42,7 +42,7 @@ public static class ColaboradorEstado
 
     private static Task<EstadoConfiguracion> CalcularAsync(ColaboradorRps colaborador, RpsDbContext db, CancellationToken ct)
     {
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hoy = HoraEcuador.Hoy;
         return CalcularEntreAsync(colaborador, db, hoy, hoy, ct);
     }
 

@@ -9,12 +9,13 @@ namespace rps_backend.Features.Honorarios.Application;
 // FechaInicioVigencia: cualquier día; si cae a mitad de mes, ese mes se paga en tramos.
 // Reemplazar: si ya hay una para la misma fecha, se sobrescribe en vez de rechazarla (el formulario
 // de contratos, al cambiar un honorario).
+// AdendaId: la adenda que registra este cambio (al corregirla se corrige también este honorario).
 public record CrearCondicionEconomicaRequest(
     Guid? ProyectoId, Guid? ContratoId, decimal? ImporteMensual, Modalidad? Modalidad, DateOnly? FechaInicioVigencia, string? Observaciones,
-    bool Reemplazar = false);
+    bool Reemplazar = false, Guid? AdendaId = null);
 
 // ===== Responses =====
 
 public record CondicionEconomicaResponse(
     Guid Id, Guid ColaboradorId, Guid? ProyectoId, string? ProyectoNombre, Guid ContratoId,
-    decimal ImporteMensual, Modalidad Modalidad, DateOnly FechaInicioVigencia, string? Observaciones);
+    decimal ImporteMensual, Modalidad Modalidad, DateOnly FechaInicioVigencia, string? Observaciones, Guid? AdendaId = null);

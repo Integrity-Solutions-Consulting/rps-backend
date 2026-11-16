@@ -30,7 +30,7 @@ public static class ReportesExcel
             hoja.Cell(3, 1).Value = h.Titulo;
             hoja.Cell(3, 1).Style.Font.SetBold().Font.SetFontSize(12);
             hoja.Cell(4, 1).Value = h.Subtitulo;
-            hoja.Cell(5, 1).Value = $"Generado el {DateTime.Now:dd/MM/yyyy HH:mm} · Documento de control interno; no es comprobante de pago.";
+            hoja.Cell(5, 1).Value = $"Generado el {Shared.HoraEcuador.Ahora:dd/MM/yyyy HH:mm} · Documento de control interno; no es comprobante de pago.";
             hoja.Cell(5, 1).Style.Font.SetItalic().Font.SetFontColor(XLColor.Gray);
 
             const int filaEncabezado = 7;

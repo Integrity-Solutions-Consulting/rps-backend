@@ -327,7 +327,6 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
 
     private static DateOnly MesActual()
     {
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        return new DateOnly(hoy.Year, hoy.Month, 1);
+        return HoraEcuador.MesActual;
     }
 }

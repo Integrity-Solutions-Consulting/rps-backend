@@ -29,6 +29,9 @@ public static class CondicionEconomicaErrores
         Error.Conflicto("CondicionEconomica.YaUsadaEnHonorarios",
             $"El honorario vigente desde el {fecha:dd/MM/yyyy} ya se usó en un cálculo de honorarios generado. Elimina ese cálculo (si aún no está liquidado) para poder cambiarlo.");
 
+    public static Error AdendaNoEncontrada(Guid id) =>
+        Error.NoEncontrado("CondicionEconomica.AdendaNoEncontrada", $"No existe una adenda con id '{id}' para ese contrato.");
+
     public static Error FechaInicioVigenciaDuplicada(DateOnly fecha) =>
         Error.Conflicto("CondicionEconomica.FechaInicioVigenciaDuplicada", $"Ya existe una condición económica de ese proyecto vigente desde el {fecha:dd/MM/yyyy}.");
 }

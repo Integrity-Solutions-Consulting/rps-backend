@@ -78,7 +78,7 @@ public static class LiquidacionesPdf
             });
             page.Footer().Row(row =>
             {
-                row.RelativeItem().Text($"Generado el {r.GeneradoEn.ToLocalTime():dd/MM/yyyy HH:mm} · Documento de control interno; no es comprobante de pago.")
+                row.RelativeItem().Text($"Generado el {Shared.HoraEcuador.DesdeUtc(r.GeneradoEn):dd/MM/yyyy HH:mm} · Documento de control interno; no es comprobante de pago.")
                     .FontSize(7.5f).FontColor(Gris);
                 row.AutoItem().Text(t =>
                 {

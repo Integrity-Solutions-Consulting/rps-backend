@@ -15,6 +15,9 @@ public class ContratosService(RpsDbContext db)
         if (!await db.ColaboradoresRps.AnyAsync(c => c.Id == colaboradorId, ct))
             return ContratoErrores.ColaboradorNoEncontrado(colaboradorId);
 
+        // Si una adenda programada empezó a regir hoy y el job todavía no pasó, se aplica ya.
+        await AdendasProgramadas.AplicarVencidasAsync(db, ct);
+
         var contratos = await db.Contratos.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId)
             .OrderByDescending(c => c.FechaInicio)
@@ -217,12 +220,25 @@ public class ContratosService(RpsDbContext db)
         if (contrato is null)
             return ContratoErrores.NoEncontrado(contratoId);
 
-        return await db.Adendas.AsNoTracking()
+        var adendas = await db.Adendas.AsNoTracking()
             .Where(a => a.ContratoId == contratoId)
-            .OrderByDescending(a => a.FechaRegistro)
-            .Select(a => new AdendaResponse(a.Id, a.ContratoId, a.NuevaFechaFin, a.FechaRegistro, a.Observaciones, a.Cambios, a.FechaVigencia))
             .ToListAsync(ct);
+        var ultima = Ultima(adendas);
+
+        return adendas
+            .OrderByDescending(a => a.FechaVigencia).ThenByDescending(a => a.CreadoEn)
+            .Select(a => AResponse(a, ultima))
+            .ToList();
     }
+
+    // La última adenda del contrato: la que rige desde la fecha más reciente (y, a igual fecha, la
+    // registrada después). Es la única cuya fecha y montos se pueden corregir.
+    private static Adenda? Ultima(IEnumerable<Adenda> adendas) =>
+        adendas.OrderByDescending(a => a.FechaVigencia).ThenByDescending(a => a.CreadoEn).FirstOrDefault();
+
+    private static AdendaResponse AResponse(Adenda a, Adenda? ultima) => new(
+        a.Id, a.ContratoId, a.NuevaFechaFin, a.FechaRegistro, a.Observaciones, a.Cambios, a.FechaVigencia,
+        Programada: a.FechaVigencia > HoraEcuador.Hoy, EsUltima: ultima?.Id == a.Id);
 
     // Una adenda registra un cambio del contrato que rige desde FechaVigencia (hoy o una fecha
     // futura) hasta la nueva fecha de fin: la fecha de fin (igual o posterior a la vigente; null en
@@ -271,6 +287,15 @@ public class ContratosService(RpsDbContext db)
         if (fechaVigencia < contrato.FechaInicio || (nuevaFechaFin ?? contrato.FechaFin) is { } finAdenda && fechaVigencia > finAdenda)
             return ContratoErrores.FechaVigenciaFueraDelContrato;
 
+        // Superposición: con una adenda programada (rige en el futuro) no se registra otra; se corrige
+        // esa. Y ninguna adenda nueva puede regir antes que la última, para que el orden de las
+        // fechas sea el orden en que se aplican.
+        var anteriores = await db.Adendas.AsNoTracking().Where(a => a.ContratoId == contratoId).ToListAsync(ct);
+        if (anteriores.Where(a => a.FechaVigencia > hoy).MinBy(a => a.FechaVigencia) is { } programada)
+            return ContratoErrores.AdendaProgramadaPendiente(programada.FechaVigencia);
+        if (Ultima(anteriores) is { } ultimaAnterior && fechaVigencia < ultimaAnterior.FechaVigencia)
+            return ContratoErrores.FechaVigenciaAnteriorAOtraAdenda(ultimaAnterior.FechaVigencia);
+
         List<Guid>? proyectoIds = null;
         if (request.ProyectoIds is not null)
         {
@@ -289,6 +314,7 @@ public class ContratosService(RpsDbContext db)
             NuevaFechaFin = nuevaFechaFin,
             FechaRegistro = hoy,
             FechaVigencia = fechaVigencia,
+            ProyectosNuevos = proyectoIds,
             Cambios = string.IsNullOrEmpty(cambios) ? null : cambios,
             Observaciones = string.IsNullOrEmpty(observaciones) ? null : observaciones
         };
@@ -296,8 +322,10 @@ public class ContratosService(RpsDbContext db)
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         db.Adendas.Add(adenda);
-        if (proyectoIds is not null)
-            await ReemplazarProyectosAsync(contratoId, proyectoIds, ct);
+        // Los proyectos cambian el día en que rige la adenda: hoy, o ese día si es futura
+        // (AdendasProgramadas los aplica entonces).
+        if (fechaVigencia <= hoy)
+            await AdendasProgramadas.AplicarProyectosAsync(db, adenda, ct);
         contrato.ActualizadoEn = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -307,13 +335,18 @@ public class ContratosService(RpsDbContext db)
 
         await tx.CommitAsync(ct);
 
-        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones, adenda.Cambios, adenda.FechaVigencia);
+        return AResponse(adenda, adenda);
     }
 
-    // Permite corregir una adenda ya registrada (ej. se escribió mal la fecha): la nueva fecha debe
-    // seguir siendo posterior a la que quedaría vigente sin contar esta misma adenda.
+    // Corrige una adenda mal registrada:
+    //  - fin y observaciones, en cualquiera (el fin debe seguir siendo posterior al que quedaría
+    //    vigente sin contar esta misma adenda);
+    //  - "rige desde" y el monto/modalidad de los honorarios que registró, solo en la última. La
+    //    fecha nueva va de hoy en adelante (o se deja igual); los honorarios de la adenda se mueven a
+    //    esa fecha y los proyectos se aplican o se deshacen según si ya rige.
+    // Lo ya calculado se ajusta al volver a calcular el período (la liquidación queda "Modificada").
     public async Task<Resultado<AdendaResponse>> EditarAdendaAsync(
-        Guid colaboradorId, Guid contratoId, Guid adendaId, CrearAdendaRequest request, CancellationToken ct)
+        Guid colaboradorId, Guid contratoId, Guid adendaId, CorregirAdendaRequest request, CancellationToken ct)
     {
         var observaciones = request.Observaciones?.Trim();
         if (observaciones?.Length > 500)
@@ -345,10 +378,85 @@ public class ContratosService(RpsDbContext db)
                 return ContratoErrores.FechaFueraDeRango("nuevaFechaFin");
         }
 
+        var cambios = request.Cambios?.Trim();
+        if (cambios?.Length > 1000)
+            return ContratoErrores.CambiosInvalidos;
+
+        var hoy = Hoy();
+        var delContrato = await db.Adendas.AsNoTracking().Where(a => a.ContratoId == contratoId).ToListAsync(ct);
+        var esUltima = Ultima(delContrato)?.Id == adenda.Id;
+
+        // "Rige desde": solo en la última; de hoy en adelante (o igual), dentro del contrato y no
+        // antes de la adenda anterior.
+        var fechaAnterior = adenda.FechaVigencia;
+        var fechaNueva = request.FechaVigencia ?? fechaAnterior;
+        if (fechaNueva != fechaAnterior)
+        {
+            if (!esUltima)
+                return ContratoErrores.SoloUltimaAdenda;
+            if (fechaNueva < hoy)
+                return ContratoErrores.FechaVigenciaAnterior;
+            if (fechaNueva < contrato.FechaInicio || (request.NuevaFechaFin ?? contrato.FechaFin) is { } fin && fechaNueva > fin)
+                return ContratoErrores.FechaVigenciaFueraDelContrato;
+            if (Ultima(delContrato.Where(a => a.Id != adenda.Id)) is { } previa && fechaNueva < previa.FechaVigencia)
+                return ContratoErrores.FechaVigenciaAnteriorAOtraAdenda(previa.FechaVigencia);
+        }
+
+        // Honorarios que registró esta adenda (montos a corregir y/o fecha a mover).
+        var condiciones = await db.CondicionesEconomicas.Where(c => c.AdendaId == adenda.Id).ToListAsync(ct);
+        var correcciones = request.Honorarios ?? [];
+        if (correcciones.Count > 0 && !esUltima)
+            return ContratoErrores.SoloUltimaAdenda;
+        foreach (var c in correcciones)
+        {
+            if (condiciones.All(x => x.Id != c.CondicionEconomicaId))
+                return ContratoErrores.HonorarioNoEsDeLaAdenda;
+            if (c.ImporteMensual is not > 0)
+                return ContratoErrores.ImporteCorreccionInvalido;
+        }
+
+        // Al mover la fecha, sus honorarios se van con ella (los de proyectos nuevos, que rigen desde
+        // el inicio del mes, se quedan). No puede chocar con otro honorario del contrato ese día.
+        var aMover = fechaNueva == fechaAnterior ? [] : condiciones.Where(c => c.FechaInicioVigencia == fechaAnterior).ToList();
+        foreach (var c in aMover)
+        {
+            var ocupada = await db.CondicionesEconomicas.AnyAsync(x =>
+                x.Id != c.Id && x.AdendaId != adenda.Id && x.FechaInicioVigencia == fechaNueva
+                && (c.ProyectoId == null
+                    ? x.ContratoId == c.ContratoId && x.ProyectoId == null
+                    : x.ColaboradorId == c.ColaboradorId && x.ProyectoId == c.ProyectoId), ct);
+            if (ocupada)
+                return ContratoErrores.FechaVigenciaOcupada(fechaNueva);
+        }
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         adenda.NuevaFechaFin = request.NuevaFechaFin;
         adenda.Observaciones = string.IsNullOrEmpty(observaciones) ? null : observaciones;
+        if (request.Cambios is not null)
+            adenda.Cambios = string.IsNullOrEmpty(cambios) ? null : cambios;
+
+        foreach (var c in correcciones)
+        {
+            var condicion = condiciones.First(x => x.Id == c.CondicionEconomicaId);
+            condicion.ImporteMensual = c.ImporteMensual!.Value;
+            if (c.Modalidad is { } modalidad)
+                condicion.Modalidad = modalidad;
+        }
+
+        if (fechaNueva != fechaAnterior)
+        {
+            adenda.FechaVigencia = fechaNueva;
+            foreach (var c in aMover)
+                c.FechaInicioVigencia = fechaNueva;
+
+            // Proyectos: si ahora rige en el futuro, se vuelve a los de antes hasta ese día; si ya
+            // rige, se aplican.
+            if (fechaNueva > hoy)
+                await AdendasProgramadas.DeshacerProyectosAsync(db, adenda, ct);
+            else
+                await AdendasProgramadas.AplicarProyectosAsync(db, adenda, ct);
+        }
         await db.SaveChangesAsync(ct);
 
         // Puede revivir o cerrar la vigencia del contrato según hacia dónde se movió la fecha.
@@ -357,7 +465,7 @@ public class ContratosService(RpsDbContext db)
 
         await tx.CommitAsync(ct);
 
-        return new AdendaResponse(adenda.Id, adenda.ContratoId, adenda.NuevaFechaFin, adenda.FechaRegistro, adenda.Observaciones, adenda.Cambios, adenda.FechaVigencia);
+        return AResponse(adenda, esUltima ? adenda : null);
     }
 
     // Proyectos que existen, están activos y no los cubre otro contrato del colaborador en fechas superpuestas.
@@ -384,13 +492,8 @@ public class ContratosService(RpsDbContext db)
     }
 
     // Deja en el contrato exactamente esos proyectos.
-    private async Task ReemplazarProyectosAsync(Guid contratoId, List<Guid> proyectoIds, CancellationToken ct)
-    {
-        var actuales = await db.ContratosProyectos.Where(cp => cp.ContratoId == contratoId).ToListAsync(ct);
-        db.ContratosProyectos.RemoveRange(actuales.Where(cp => !proyectoIds.Contains(cp.ProyectoId)));
-        db.ContratosProyectos.AddRange(proyectoIds.Where(id => !actuales.Any(cp => cp.ProyectoId == id))
-            .Select(id => new ContratoProyecto { ContratoId = contratoId, ProyectoId = id }));
-    }
+    private Task ReemplazarProyectosAsync(Guid contratoId, List<Guid> proyectoIds, CancellationToken ct) =>
+        AdendasProgramadas.ReemplazarAsync(db, contratoId, proyectoIds, ct);
 
     // Cómo se paga el contrato según lo último registrado (incluido un cambio programado): true si
     // es un solo monto por contrato. Sin honorarios todavía se trata como por contrato (aún no hay
@@ -533,7 +636,9 @@ public class ContratosService(RpsDbContext db)
         return null;
     }
 
-    private static DateOnly Hoy() => DateOnly.FromDateTime(DateTime.UtcNow);
+    // Hoy en Ecuador: con UtcNow, después de las 19:00 ya sería el día siguiente y una adenda
+    // "desde hoy" se rechazaría por ser anterior a hoy.
+    private static DateOnly Hoy() => HoraEcuador.Hoy;
 
     // Año desde 2000 y de 4 dígitos (DateOnly ya no admite más de 9999).
     private static bool FechaEnRango(DateOnly fecha) => fecha.Year >= 2000;

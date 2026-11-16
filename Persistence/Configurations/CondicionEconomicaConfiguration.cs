@@ -22,6 +22,7 @@ public class CondicionEconomicaConfiguration : IEntityTypeConfiguration<Condicio
         builder.HasOne<ColaboradorRps>().WithMany().HasForeignKey(c => c.ColaboradorId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Proyecto>().WithMany().HasForeignKey(c => c.ProyectoId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Contrato>().WithMany().HasForeignKey(c => c.ContratoId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Adenda>().WithMany().HasForeignKey(c => c.AdendaId).OnDelete(DeleteBehavior.SetNull);
 
         // No se repite la misma fecha de vigencia dos veces para la misma relación colaborador-proyecto.
         builder.HasIndex(c => new { c.ColaboradorId, c.ProyectoId, c.FechaInicioVigencia }).IsUnique();
