@@ -72,5 +72,6 @@ public static class ColaboradoresEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict);
 
         return app;
+        
     }
 }
