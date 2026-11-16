@@ -29,9 +29,17 @@ public class HonorariosService(RpsDbContext db)
             .Where(c => c.Clasificacion != null)
             .ToListAsync(ct);
 
+        // También quien ya tenía honorarios en el período aunque hoy no esté configurado: se le
+        // vuelven a contar los días con lo que rige (si ya no le corresponde nada, se retiran) en vez
+        // de dejar un cálculo viejo.
+        var conHonorariosEnPeriodo = (await db.Honorarios.AsNoTracking()
+                .Where(h => h.Periodo == periodo).Select(h => h.ColaboradorId).Distinct().ToListAsync(ct))
+            .ToHashSet();
+
         var colaboradores = new List<ColaboradorRps>();
         foreach (var candidato in candidatos)
-            if (await ColaboradorEstado.CalcularParaPeriodoAsync(candidato, db, periodo, ct) == EstadoConfiguracion.Configurado)
+            if (conHonorariosEnPeriodo.Contains(candidato.Id)
+                || await ColaboradorEstado.CalcularParaPeriodoAsync(candidato, db, periodo, ct) == EstadoConfiguracion.Configurado)
                 colaboradores.Add(candidato);
 
         if (colaboradores.Count == 0)
@@ -127,9 +135,11 @@ public class HonorariosService(RpsDbContext db)
 
             if (existentes.TryGetValue((condicion.ContratoId, condicion.ProyectoId, condicion.Id), out var existente))
             {
-                // Mismos días en el mismo tramo: se deja tal cual (conserva los porcentajes con que
-                // se calculó, RN 29).
-                if (generaHonorario && existente.DiasReconocidos == diasReconocidos && existente.DiasReales == diasReales)
+                // Mismos días, mismo monto y misma modalidad en el mismo tramo: se deja tal cual
+                // (conserva los porcentajes con que se calculó, RN 29). Si se corrigió el monto de la
+                // condición (adenda corregida o reemplazada), el proporcional ya no coincide.
+                if (generaHonorario && existente.DiasReconocidos == diasReconocidos && existente.DiasReales == diasReales
+                    && existente.ProporcionalAcordado == proporcionalAcordado && existente.Modalidad == condicion.Modalidad)
                 {
                     omitidos++;
                     continue;
@@ -144,7 +154,7 @@ public class HonorariosService(RpsDbContext db)
                     continue;
                 }
 
-                // Cambiaron los días del tramo: se recalcula y se suelta de la liquidación para
+                // Cambiaron los días o el monto del tramo: se recalcula y se suelta de la liquidación para
                 // que el siguiente paso la vuelva a consolidar con el valor nuevo.
                 Aplicar(existente, condicion, diasReconocidos, proporcionalAcordado);
                 existente.LiquidacionId = null;

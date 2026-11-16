@@ -739,6 +739,18 @@ namespace rps_backend.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("observaciones");
 
+                    b.PrimitiveCollection<List<Guid>>("ProyectosAnteriores")
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("proyectos_anteriores");
+
+                    b.Property<bool>("ProyectosAplicados")
+                        .HasColumnType("boolean")
+                        .HasColumnName("proyectos_aplicados");
+
+                    b.PrimitiveCollection<List<Guid>>("ProyectosNuevos")
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("proyectos_nuevos");
+
                     b.HasKey("Id")
                         .HasName("pk_adenda");
 
@@ -936,6 +948,10 @@ namespace rps_backend.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AdendaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("adenda_id");
+
                     b.Property<Guid>("ColaboradorId")
                         .HasColumnType("uuid")
                         .HasColumnName("colaborador_id");
@@ -973,6 +989,9 @@ namespace rps_backend.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_condicion_economica");
+
+                    b.HasIndex("AdendaId")
+                        .HasDatabaseName("ix_condicion_economica_adenda_id");
 
                     b.HasIndex("ProyectoId")
                         .HasDatabaseName("ix_condicion_economica_proyecto_id");
@@ -1563,6 +1582,12 @@ namespace rps_backend.Migrations
 
             modelBuilder.Entity("rps_backend.Features.Honorarios.Domain.CondicionEconomica", b =>
                 {
+                    b.HasOne("rps_backend.Features.Contratos.Domain.Adenda", null)
+                        .WithMany()
+                        .HasForeignKey("AdendaId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_condicion_economica_adenda_adenda_id");
+
                     b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
                         .WithMany()
                         .HasForeignKey("ColaboradorId")

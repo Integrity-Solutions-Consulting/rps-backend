@@ -133,17 +133,6 @@ public class VencimientosContratosService(RpsDbContext db)
             ? dias.Value
             : (await db.ConfiguracionGlobal.AsNoTracking().Select(c => (int?)c.DiasAvisoVencimiento1).FirstOrDefaultAsync(ct)) ?? DiasPorDefecto;
 
-    // "Hoy" en Ecuador: con UtcNow, después de las 19:00 ya sería el día siguiente.
-    internal static DateOnly HoyEnEcuador()
-    {
-        try
-        {
-            var zona = TimeZoneInfo.FindSystemTimeZoneById("America/Guayaquil");
-            return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zona));
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
-        }
-    }
+    // "Hoy" en Ecuador (ver HoraEcuador).
+    internal static DateOnly HoyEnEcuador() => Shared.HoraEcuador.Hoy;
 }

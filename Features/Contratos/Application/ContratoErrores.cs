@@ -80,4 +80,28 @@ public static class ContratoErrores
 
     public static readonly Error FechaVigenciaFueraDelContrato =
         Error.Validacion("Contrato.FechaVigenciaFueraDelContrato", "fechaVigencia", "Debe estar entre el inicio del contrato y su fecha de fin.");
+
+    public static Error FechaVigenciaAnteriorAOtraAdenda(DateOnly fecha) =>
+        Error.Validacion("Contrato.FechaVigenciaAnteriorAOtraAdenda", "fechaVigencia",
+            $"No puede ser anterior a la adenda que rige desde el {fecha:dd/MM/yyyy}.");
+
+    // Dos adendas programadas a la vez se pisarían (la más nueva podría quedar reemplazada por la
+    // anterior si esta rige después): se corrige la que ya está programada.
+    public static Error AdendaProgramadaPendiente(DateOnly fecha) =>
+        Error.Conflicto("Contrato.AdendaProgramadaPendiente",
+            $"Ya hay una adenda programada desde el {fecha:dd/MM/yyyy}. Corrígela para agregar estos cambios, en vez de registrar otra.");
+
+    public static readonly Error SoloUltimaAdenda =
+        Error.Validacion("Contrato.SoloUltimaAdenda", "fechaVigencia",
+            "Solo se puede cambiar la fecha o el monto de la última adenda del contrato; una anterior ya quedó reemplazada por las siguientes.");
+
+    public static readonly Error HonorarioNoEsDeLaAdenda =
+        Error.Validacion("Contrato.HonorarioNoEsDeLaAdenda", "honorarios", "Ese honorario no lo registró esta adenda.");
+
+    public static readonly Error ImporteCorreccionInvalido =
+        Error.Validacion("Contrato.ImporteCorreccionInvalido", "honorarios", "El monto debe ser mayor a 0.");
+
+    public static Error FechaVigenciaOcupada(DateOnly fecha) =>
+        Error.Conflicto("Contrato.FechaVigenciaOcupada",
+            $"Ya hay otro honorario de este contrato vigente desde el {fecha:dd/MM/yyyy}. Elige otra fecha.");
 }

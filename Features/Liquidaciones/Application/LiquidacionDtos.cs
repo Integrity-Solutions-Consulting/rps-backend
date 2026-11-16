@@ -9,9 +9,10 @@ public record GenerarLiquidacionesRequest(DateOnly? Periodo);
 
 // ===== Responses =====
 
-// Actualizadas: colaboradores que ya tenían Liquidacion de este período y recibieron honorarios
-// adicionales (ej. un contrato tardío); se suman a la existente, nunca se crea una segunda (RN 30).
-public record GenerarLiquidacionesResponse(int Generadas, int Actualizadas, int HonorariosIncluidos);
+// Actualizadas: colaboradores que ya tenían Liquidacion de este período y se recalcularon (honorarios
+// nuevos o con días/monto distintos); nunca se crea una segunda (RN 30).
+// Eliminadas: se quedaron sin honorarios en el período (ya no les corresponde ningún día).
+public record GenerarLiquidacionesResponse(int Generadas, int Actualizadas, int HonorariosIncluidos, int Eliminadas = 0);
 
 // RecuperacionNoAplicada > 0 o AjustePorProrrateo > 0: el corte quedó por debajo de lo programado
 // (anticipo o quincena). Es una inconsistencia para que Contabilidad revise, no un error silencioso.

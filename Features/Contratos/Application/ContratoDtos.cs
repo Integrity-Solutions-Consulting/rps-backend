@@ -17,9 +17,18 @@ public record EditarContratoRequest(List<Guid>? ProyectoIds, DateOnly? FechaInic
 // NuevaFechaFin: obligatoria (igual o posterior al fin vigente) salvo en contratos indefinidos,
 // donde va null. ProyectoIds: null = los proyectos no cambian; con valor, la lista completa nueva.
 // Cambios: resumen legible de lo que cambia (lo arma el formulario).
-// FechaVigencia: desde cuándo rigen los cambios (hoy o después). Null = hoy. Al corregir una adenda se ignora.
+// FechaVigencia: desde cuándo rigen los cambios (hoy o después). Null = hoy.
 public record CrearAdendaRequest(DateOnly? NuevaFechaFin, string? Observaciones, List<Guid>? ProyectoIds = null, string? Cambios = null,
     DateOnly? FechaVigencia = null);
+
+// Corregir una adenda mal registrada. Fin y observaciones, en cualquier adenda. "Rige desde" y los
+// honorarios que registró (monto, modalidad), solo en la última del contrato: una anterior ya quedó
+// reemplazada por las que vinieron después. Null = no cambia. Cambios: el resumen actualizado.
+public record CorregirAdendaRequest(
+    DateOnly? NuevaFechaFin, string? Observaciones, DateOnly? FechaVigencia = null, string? Cambios = null,
+    List<CorreccionHonorarioRequest>? Honorarios = null);
+
+public record CorreccionHonorarioRequest(Guid CondicionEconomicaId, decimal? ImporteMensual, Shared.Modalidad? Modalidad);
 
 // ===== Responses =====
 
@@ -37,5 +46,6 @@ public record ContratoResponse(
     string? Observaciones,
     bool Vigente);
 
+// Programada: rige desde una fecha futura (todavía no aplica). EsUltima: la que se puede corregir completa.
 public record AdendaResponse(Guid Id, Guid ContratoId, DateOnly? NuevaFechaFin, DateOnly FechaRegistro, string? Observaciones, string? Cambios,
-    DateOnly FechaVigencia);
+    DateOnly FechaVigencia, bool Programada = false, bool EsUltima = false);

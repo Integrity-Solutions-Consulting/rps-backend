@@ -134,11 +134,25 @@ public class LiquidacionesService(RpsDbContext db)
 
         var generadas = 0;
         var actualizadas = 0;
+        var eliminadas = 0;
         foreach (var colaboradorId in colaboradorIds)
         {
             var grupo = honorariosNuevos.Where(h => h.ColaboradorId == colaboradorId).ToList();
             var previosDelColaborador = honorariosPrevios.Where(h => h.ColaboradorId == colaboradorId).ToList();
             var yaExistia = liquidacionesExistentes.TryGetValue(colaboradorId, out var liquidacion);
+
+            // Se le retiraron todos los honorarios (ya no le corresponden días en el período): su
+            // liquidación ya no tiene nada que pagar y se elimina con sus cortes.
+            if (grupo.Count == 0 && previosDelColaborador.Count == 0)
+            {
+                if (yaExistia)
+                {
+                    db.Cortes.RemoveRange(await db.Cortes.Where(c => c.LiquidacionId == liquidacion!.Id).ToListAsync(ct));
+                    db.Liquidaciones.Remove(liquidacion!);
+                    eliminadas++;
+                }
+                continue;
+            }
 
             var netoConsolidado = previosDelColaborador.Sum(h => h.Neto) + grupo.Sum(h => h.Neto);
 
@@ -232,7 +246,7 @@ public class LiquidacionesService(RpsDbContext db)
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        return new GenerarLiquidacionesResponse(generadas, actualizadas, honorariosNuevos.Count);
+        return new GenerarLiquidacionesResponse(generadas, actualizadas, honorariosNuevos.Count, eliminadas);
     }
 
     private static List<Corte> ConstruirCortes(

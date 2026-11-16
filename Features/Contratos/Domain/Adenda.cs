@@ -19,6 +19,17 @@ public class Adenda
     // Desde cuándo rigen sus cambios: el día de registro o uno posterior.
     public DateOnly FechaVigencia { get; set; }
 
+    // Proyectos del contrato desde FechaVigencia (lista completa). Null: la adenda no cambia proyectos.
+    // Si FechaVigencia es futura, se aplican ese día (ver AdendasProgramadas).
+    public List<Guid>? ProyectosNuevos { get; set; }
+
+    // Los que tenía el contrato justo antes de aplicar ProyectosNuevos: permiten deshacerlo si al
+    // corregir la adenda se mueve su fecha al futuro.
+    public List<Guid>? ProyectosAnteriores { get; set; }
+
+    // ProyectosNuevos ya se aplicó al contrato.
+    public bool ProyectosAplicados { get; set; }
+
     // Resumen legible de lo que cambió (proyectos, forma de pago, monto, fecha de fin).
     public string? Cambios { get; set; }
 

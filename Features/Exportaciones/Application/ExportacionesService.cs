@@ -174,7 +174,7 @@ public class ExportacionesService(RpsDbContext db)
 
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var contenido = ReportesPdf.Generar(new ReporteTablaPdf(
-            config.RazonSocial, config.Ruc, titulo, $"Al {DateOnly.FromDateTime(DateTime.UtcNow):dd/MM/yyyy}", subtitulo,
+            config.RazonSocial, config.Ruc, titulo, $"Al {HoraEcuador.Hoy:dd/MM/yyyy}", subtitulo,
             DateTime.UtcNow, columnas, filas,
             [$"Total: {filas.Count}", null, null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
             "No hay colaboradores registrados."));
@@ -190,7 +190,7 @@ public class ExportacionesService(RpsDbContext db)
             .OrderBy(c => c.Apellidos).ThenBy(c => c.TmrColaboradorId)
             .ToListAsync(ct);
 
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hoy = HoraEcuador.Hoy;
         var mesActual = new DateOnly(hoy.Year, hoy.Month, 1);
         var frecuencias = (await db.ColaboradoresFrecuencia.AsNoTracking()
                 .Where(f => f.VigenteDesdeMes <= mesActual)

@@ -89,7 +89,7 @@ public class HistorialService(RpsDbContext db)
         }
 
         // Honorarios (condiciones económicas).
-        var hoy = DateOnly.FromDateTime(DateTime.Now);
+        var hoy = HoraEcuador.Hoy;
         var condiciones = await db.CondicionesEconomicas.AsNoTracking()
             .Where(c => c.ColaboradorId == colaboradorId).ToListAsync(ct);
         foreach (var c in condiciones)

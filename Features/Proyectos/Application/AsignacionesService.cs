@@ -93,7 +93,7 @@ public class AsignacionesService(RpsDbContext db)
         if (asignacion is null)
             return AsignacionErrores.NoEncontrado(asignacionId);
 
-        if (asignacion.FechaInicio <= DateOnly.FromDateTime(DateTime.UtcNow))
+        if (asignacion.FechaInicio <= HoraEcuador.Hoy)
             return AsignacionErrores.NoEliminable;
 
         db.Asignaciones.Remove(asignacion);

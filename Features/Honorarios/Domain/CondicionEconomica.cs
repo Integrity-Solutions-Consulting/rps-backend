@@ -27,6 +27,10 @@ public class CondicionEconomica
 
     public string? Observaciones { get; set; }
 
+    // Adenda que registró este cambio de honorario (null: configuración inicial del contrato).
+    // Al corregir la adenda se corrigen también sus honorarios (monto, modalidad, fecha).
+    public Guid? AdendaId { get; set; }
+
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 
     public bool PorContrato => ProyectoId is null;

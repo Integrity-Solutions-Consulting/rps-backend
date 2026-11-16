@@ -54,10 +54,19 @@ public class CondicionesEconomicasService(RpsDbContext db)
             if (!await db.Proyectos.AnyAsync(p => p.Id == proyectoId, ct))
                 return CondicionEconomicaErrores.ProyectoNoEncontrado(proyectoId);
 
-            // Pago por proyecto: solo para un proyecto que ese contrato efectivamente incluya.
-            if (!await db.ContratosProyectos.AnyAsync(cp => cp.ContratoId == request.ContratoId && cp.ProyectoId == proyectoId, ct))
+            // Pago por proyecto: solo para un proyecto que ese contrato incluya, o que va a incluir
+            // por una adenda programada (sus proyectos se aplican el día en que rige).
+            var enContrato = await db.ContratosProyectos.AnyAsync(cp => cp.ContratoId == request.ContratoId && cp.ProyectoId == proyectoId, ct)
+                || await db.Adendas.AnyAsync(a => a.ContratoId == request.ContratoId && !a.ProyectosAplicados
+                    && a.ProyectosNuevos != null && a.ProyectosNuevos.Contains(proyectoId), ct);
+            if (!enContrato)
                 return CondicionEconomicaErrores.ContratoNoEncontrado(request.ContratoId.Value);
         }
+
+        // La adenda que registra este cambio: al corregirla se corrigen también sus honorarios.
+        if (request.AdendaId is { } adendaId
+            && !await db.Adendas.AnyAsync(a => a.Id == adendaId && a.ContratoId == request.ContratoId, ct))
+            return CondicionEconomicaErrores.AdendaNoEncontrada(adendaId);
 
         var existente = request.ProyectoId is null
             ? await db.CondicionesEconomicas.FirstOrDefaultAsync(c =>
@@ -72,14 +81,14 @@ public class CondicionesEconomicasService(RpsDbContext db)
             if (!request.Reemplazar)
                 return CondicionEconomicaErrores.FechaInicioVigenciaDuplicada(fechaInicioVigencia);
 
-            // Un honorario ya generado guarda el importe calculado con esta condición: cambiarla por
-            // debajo dejaría ese cálculo desalineado. Primero hay que eliminar el cálculo.
-            if (await db.Honorarios.AnyAsync(h => h.CondicionEconomicaId == existente.Id, ct))
-                return CondicionEconomicaErrores.YaUsadaEnHonorarios(fechaInicioVigencia);
-
+            // Si ya se usó en un cálculo, se corrige igual: al volver a calcular el período,
+            // HonorariosService detecta que el monto cambió, recalcula ese honorario y la
+            // liquidación queda marcada como modificada.
             existente.ContratoId = request.ContratoId.Value;
             existente.ImporteMensual = request.ImporteMensual.Value;
             existente.Modalidad = request.Modalidad.Value;
+            if (request.AdendaId is not null)
+                existente.AdendaId = request.AdendaId;
             if (request.Observaciones is not null)
                 existente.Observaciones = observaciones;
             await db.SaveChangesAsync(ct);
@@ -95,7 +104,8 @@ public class CondicionesEconomicasService(RpsDbContext db)
             ImporteMensual = request.ImporteMensual.Value,
             Modalidad = request.Modalidad.Value,
             FechaInicioVigencia = fechaInicioVigencia,
-            Observaciones = observaciones
+            Observaciones = observaciones,
+            AdendaId = request.AdendaId
         };
 
         db.CondicionesEconomicas.Add(condicion);
@@ -111,5 +121,5 @@ public class CondicionesEconomicasService(RpsDbContext db)
 
     private static CondicionEconomicaResponse AResponse(CondicionEconomica c, string? proyectoNombre) => new(
         c.Id, c.ColaboradorId, c.ProyectoId, proyectoNombre, c.ContratoId,
-        c.ImporteMensual, c.Modalidad, c.FechaInicioVigencia, c.Observaciones);
+        c.ImporteMensual, c.Modalidad, c.FechaInicioVigencia, c.Observaciones, c.AdendaId);
 }

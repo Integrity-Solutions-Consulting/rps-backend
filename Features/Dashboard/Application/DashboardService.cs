@@ -81,7 +81,7 @@ public class DashboardService(RpsDbContext db)
             .GroupBy(a => a.ContratoId)
             .ToDictionary(g => g.Key, g => g.Max(a => a.NuevaFechaFin));
 
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hoy = HoraEcuador.Hoy;
         // Indefinido (FechaFin null) nunca vence: no participa de este aviso.
         var fechasFinVigente = contratos.Select(c =>
         {

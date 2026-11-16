@@ -11,7 +11,7 @@ public static class AuthErrores
         Error.Validacion("Auth.CredencialesInvalidas", "password", "Email o contraseña incorrectos.");
 
     public static Error CuentaBloqueada(DateTime hasta) =>
-        Error.Validacion("Auth.CuentaBloqueada", "email", $"Cuenta bloqueada por intentos fallidos hasta {hasta:yyyy-MM-dd HH:mm} UTC.");
+        Error.Validacion("Auth.CuentaBloqueada", "email", $"Cuenta bloqueada por intentos fallidos hasta las {HoraEcuador.DesdeUtc(hasta):HH:mm} del {HoraEcuador.DesdeUtc(hasta):dd/MM/yyyy}.");
 
     public static readonly Error CuentaInactiva =
         Error.Validacion("Auth.CuentaInactiva", "email", "La cuenta está desactivada.");
