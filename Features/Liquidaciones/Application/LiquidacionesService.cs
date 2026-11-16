@@ -83,15 +83,16 @@ public class LiquidacionesService(RpsDbContext db)
         // Cada honorario sale de una condición: la del contrato (pago por contrato, una sola) o la
         // de cada proyecto (pago por proyecto).
         // Cálculo tributario del importe mensual COMPLETO (sin prorratear) de cada condición.
-        List<CalculoTributario.Resultado> MensualCompletoDe(IEnumerable<Honorario> grupoHonorarios) => grupoHonorarios
+        // De cada uno sale su base de quincena: el neto si es modalidad Neto, el subtotal si es MasIva.
+        decimal BaseQuincenaMensualDe(IEnumerable<Honorario> grupoHonorarios) => grupoHonorarios
             .DistinctBy(h => h.CondicionEconomicaId)
-            .Select(h =>
+            .Sum(h =>
             {
                 var condicion = condicionesPorId[h.CondicionEconomicaId];
-                return CalculoTributario.Calcular(
+                var calculo = CalculoTributario.Calcular(
                     condicion.ImporteMensual, h.Modalidad, h.PorcentajeIva, h.PorcentajeRetencionFuente, h.PorcentajeRetencionIva);
-            })
-            .ToList();
+                return DistribucionCortes.BaseQuincena(h.Modalidad, calculo);
+            });
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -103,7 +104,7 @@ public class LiquidacionesService(RpsDbContext db)
             var yaExistia = liquidacionesExistentes.TryGetValue(grupo.Key, out var liquidacion);
 
             var netoConsolidado = previosDelColaborador.Sum(h => h.Neto) + grupo.Sum(h => h.Neto);
-            var subtotalMensualCompleto = MensualCompletoDe(previosDelColaborador.Concat(grupo)).Sum(r => r.Subtotal);
+            var baseQuincenaMensual = BaseQuincenaMensualDe(previosDelColaborador.Concat(grupo));
 
             if (!yaExistia)
             {
@@ -141,7 +142,7 @@ public class LiquidacionesService(RpsDbContext db)
                 .ToList();
             DateOnly? inicioEfectivo = inicios.Count > 0 ? inicios.Min() : null;
 
-            var cortesCalculados = ConstruirCortes(frecuencia, netoConsolidado, subtotalMensualCompleto, inicioEfectivo, dia15);
+            var cortesCalculados = ConstruirCortes(frecuencia, netoConsolidado, baseQuincenaMensual, inicioEfectivo, dia15);
 
             foreach (var corte in cortesCalculados)
                 corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((grupo.Key, corte.Tipo), 0m);
@@ -193,7 +194,7 @@ public class LiquidacionesService(RpsDbContext db)
     }
 
     private static List<Corte> ConstruirCortes(
-        Frecuencia frecuencia, decimal netoConsolidado, decimal subtotalMensualCompleto, DateOnly? inicioEfectivo, DateOnly dia15)
+        Frecuencia frecuencia, decimal netoConsolidado, decimal baseQuincenaMensual, DateOnly? inicioEfectivo, DateOnly dia15)
     {
         if (frecuencia == Frecuencia.FinDeMes || inicioEfectivo is not { } fechaInicioEfectiva)
             return [NuevoCorte(TipoCorte.FinDeMes, netoConsolidado)];
@@ -203,10 +204,10 @@ public class LiquidacionesService(RpsDbContext db)
         if (fechaInicioEfectiva > dia15)
             return [NuevoCorte(TipoCorte.FinDeMes, netoConsolidado)];
 
-        // Quincena ordinaria = 50% del SUBTOTAL mensual COMPLETO (sin IVA ni retenciones, sin
-        // prorratear): se asume que la primera quincena se trabajó completa salvo que la entrada
-        // fuera después del día 15 (caso ya cubierto arriba). Ver DistribucionCortes.
-        var quincena = DistribucionCortes.Quincena(subtotalMensualCompleto);
+        // Quincena ordinaria = 50% del mensual COMPLETO sin prorratear (del neto si es modalidad
+        // Neto, del subtotal si es MasIva): se asume que la primera quincena se trabajó completa
+        // salvo que la entrada fuera después del día 15 (caso ya cubierto arriba). Ver DistribucionCortes.
+        var quincena = DistribucionCortes.Quincena(baseQuincenaMensual);
 
         // RN 27 / fin de mes = lo que queda: el neto reconocido en el mes (ya prorrateado por días
         // reales, con IVA y retenciones) menos el valor base de la quincena. Se resta el valor
