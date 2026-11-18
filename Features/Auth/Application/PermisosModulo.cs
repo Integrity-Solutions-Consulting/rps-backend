@@ -8,7 +8,7 @@ public static class PermisosModulo
     public const string RolAsistenteContable = "Asistente Contable";
 
     public static readonly string[] Todos =
-        ["colaboradores", "contratos", "anticipos", "liquidaciones", "exportaciones"];
+        ["colaboradores", "contratos", "anticipos", "prestamos", "liquidaciones", "exportaciones"];
 
     public static IReadOnlyList<string> PorDefecto(string rol) => rol switch
     {

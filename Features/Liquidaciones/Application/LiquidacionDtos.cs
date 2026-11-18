@@ -16,9 +16,10 @@ public record GenerarLiquidacionesResponse(int Generadas, int Actualizadas, int 
 
 // RecuperacionNoAplicada > 0 o AjustePorProrrateo > 0: el corte quedó por debajo de lo programado
 // (anticipo o quincena). Es una inconsistencia para que Contabilidad revise, no un error silencioso.
+// DescuentoPrestamos: cuotas de préstamos descontadas en el corte (ya restadas de ValorPreparado).
 public record CorteResponse(
     Guid Id, TipoCorte Tipo, decimal ValorBase, decimal RecuperacionAdicional, decimal ValorPreparado,
-    decimal RecuperacionNoAplicada, decimal AjustePorProrrateo);
+    decimal RecuperacionNoAplicada, decimal AjustePorProrrateo, decimal DescuentoPrestamos);
 
 public record LiquidacionResponse(
     Guid Id,

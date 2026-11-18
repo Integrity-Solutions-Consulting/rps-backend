@@ -8,7 +8,7 @@ namespace rps_backend.Features.Exportaciones.Application;
 // Datos que necesita el reporte. Los arma ExportacionesService; aquí solo se dibuja.
 public record FilaLiquidacionPdf(
     string Colaborador, string? Identificacion, string? Clasificacion, DateOnly Periodo,
-    decimal NetoConsolidado, decimal Quincena, decimal FinDeMes, decimal RecuperacionAnticipos, decimal APagar, bool Revisado,
+    decimal NetoConsolidado, decimal Quincena, decimal FinDeMes, decimal RecuperacionAnticipos, decimal DescuentoPrestamos, decimal APagar, bool Revisado,
     IReadOnlyList<DetalleHonorarioPdf> Honorarios, IReadOnlyList<DetalleCortePdf> Cortes);
 
 // Un honorario de la liquidación: un proyecto (pago por proyecto) o el contrato (pago por contrato).
@@ -17,8 +17,8 @@ public record DetalleHonorarioPdf(
     decimal Subtotal, decimal Iva, decimal TotalDocumento, decimal RetencionFuente, decimal RetencionIva,
     decimal TotalRetenciones, decimal Neto);
 
-// Un corte de pago: base, cuotas de anticipos descontadas y lo que queda preparado para pagar.
-public record DetalleCortePdf(string Corte, string Rango, decimal ValorBase, decimal CuotasAnticipos, decimal ValorPreparado);
+// Un corte de pago: base, cuotas de anticipos y de préstamos descontadas y lo que queda preparado para pagar.
+public record DetalleCortePdf(string Corte, string Rango, decimal ValorBase, decimal CuotasAnticipos, decimal CuotasPrestamos, decimal ValorPreparado);
 
 public record ReporteLiquidacionesPdf(
     string RazonSocial, string Ruc, string Moneda, DateOnly? Periodo, DateTime GeneradoEn, IReadOnlyList<FilaLiquidacionPdf> Filas,
@@ -151,6 +151,7 @@ public static class LiquidacionesPdf
                 cols.RelativeColumn(1.3f);     // Quincena
                 cols.RelativeColumn(1.3f);     // Fin de mes
                 cols.RelativeColumn(1.5f);     // Recuperación
+                cols.RelativeColumn(1.4f);     // Préstamos
                 cols.RelativeColumn(1.5f);     // A pagar
                 cols.RelativeColumn(1.1f);     // Revisado
             });
@@ -166,6 +167,7 @@ public static class LiquidacionesPdf
                 Cabecera(h.Cell(), "Quincena", derecha: true);
                 Cabecera(h.Cell(), "Fin de mes", derecha: true);
                 Cabecera(h.Cell(), "Recup. anticipos", derecha: true);
+                Cabecera(h.Cell(), "Préstamos", derecha: true);
                 Cabecera(h.Cell(), "A pagar", derecha: true);
                 Cabecera(h.Cell(), "Revisado");
             });
@@ -183,6 +185,7 @@ public static class LiquidacionesPdf
                 Celda(t.Cell(), f.Quincena == 0 ? "—" : Monto(f.Quincena), derecha: true);
                 Celda(t.Cell(), Monto(f.FinDeMes), derecha: true);
                 Celda(t.Cell(), f.RecuperacionAnticipos == 0 ? "—" : "-" + Monto(f.RecuperacionAnticipos), derecha: true);
+                Celda(t.Cell(), f.DescuentoPrestamos == 0 ? "—" : "-" + Monto(f.DescuentoPrestamos), derecha: true);
                 Celda(t.Cell(), Monto(f.APagar), derecha: true, negrita: true);
                 Celda(t.Cell(), f.Revisado ? "Sí" : "Pendiente");
             }
@@ -193,6 +196,7 @@ public static class LiquidacionesPdf
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.Quincena))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.FinDeMes))).Bold();
             t.Cell().Element(Total).AlignRight().Text("-" + Monto(r.Filas.Sum(f => f.RecuperacionAnticipos))).Bold();
+            t.Cell().Element(Total).AlignRight().Text("-" + Monto(r.Filas.Sum(f => f.DescuentoPrestamos))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.APagar))).Bold().FontColor(Verde);
             t.Cell().Element(Total);
         });
@@ -253,16 +257,17 @@ public static class LiquidacionesPdf
                 }
             });
 
-            // Cortes: base, cuotas de anticipos y valor preparado.
+            // Cortes: base, cuotas de anticipos, cuotas de préstamos y valor preparado.
             if (f.Cortes.Count > 0)
             {
-                col.Item().PaddingTop(6).Width(430).Table(t =>
+                col.Item().PaddingTop(6).Width(510).Table(t =>
                 {
                     t.ColumnsDefinition(cols =>
                     {
                         cols.RelativeColumn(1.4f);
                         cols.RelativeColumn(1.4f);
                         cols.RelativeColumn(1.2f);
+                        cols.RelativeColumn(1.3f);
                         cols.RelativeColumn(1.3f);
                         cols.RelativeColumn(1.3f);
                     });
@@ -272,6 +277,7 @@ public static class LiquidacionesPdf
                         Cabecera(h.Cell(), "Días");
                         Cabecera(h.Cell(), "Base", derecha: true);
                         Cabecera(h.Cell(), "Cuotas anticipos", derecha: true);
+                        Cabecera(h.Cell(), "Cuotas préstamos", derecha: true);
                         Cabecera(h.Cell(), "Valor preparado", derecha: true);
                     });
                     foreach (var k in f.Cortes)
@@ -280,6 +286,7 @@ public static class LiquidacionesPdf
                         Celda(t.Cell(), k.Rango);
                         Celda(t.Cell(), Monto(k.ValorBase), derecha: true);
                         Celda(t.Cell(), k.CuotasAnticipos == 0 ? "—" : "-" + Monto(k.CuotasAnticipos), derecha: true);
+                        Celda(t.Cell(), k.CuotasPrestamos == 0 ? "—" : "-" + Monto(k.CuotasPrestamos), derecha: true);
                         Celda(t.Cell(), Monto(k.ValorPreparado), derecha: true, negrita: true);
                     }
                 });

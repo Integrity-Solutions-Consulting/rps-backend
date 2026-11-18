@@ -9,6 +9,7 @@ using rps_backend.Features.Contratos.Domain;
 using rps_backend.Features.Feriados.Domain;
 using rps_backend.Features.Honorarios.Domain;
 using rps_backend.Features.Liquidaciones.Domain;
+using rps_backend.Features.Prestamos.Domain;
 using rps_backend.Features.Proyectos.Domain;
 namespace rps_backend.Persistence;
 
@@ -35,6 +36,8 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<rps_backend.Features.Liquidaciones.Domain.Corte> Cortes => Set<rps_backend.Features.Liquidaciones.Domain.Corte>();
     public DbSet<AnticipoAdicional> AnticiposAdicionales => Set<AnticipoAdicional>();
     public DbSet<CuotaRecuperacion> CuotasRecuperacion => Set<CuotaRecuperacion>();
+    public DbSet<Prestamo> Prestamos => Set<Prestamo>();
+    public DbSet<CuotaPrestamo> CuotasPrestamo => Set<CuotaPrestamo>();
     public DbSet<ConfiguracionGlobal> ConfiguracionGlobal => Set<ConfiguracionGlobal>();
     public DbSet<Feriado> Feriados => Set<Feriado>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();

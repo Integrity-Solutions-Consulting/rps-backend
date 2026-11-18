@@ -1216,6 +1216,12 @@ namespace rps_backend.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
 
+                    b.Property<decimal>("DescuentoPrestamos")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("descuento_prestamos");
+
                     b.Property<Guid>("LiquidacionId")
                         .HasColumnType("uuid")
                         .HasColumnName("liquidacion_id");
@@ -1316,6 +1322,102 @@ namespace rps_backend.Migrations
                         .HasDatabaseName("ix_liquidacion_colaborador_id_periodo");
 
                     b.ToTable("liquidacion", "rps");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Prestamos.Domain.CuotaPrestamo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Corte")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("corte");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<decimal>("Importe")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("importe");
+
+                    b.Property<DateOnly>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.Property<Guid>("PrestamoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prestamo_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cuota_prestamo");
+
+                    b.HasIndex("PrestamoId", "Periodo", "Corte")
+                        .IsUnique()
+                        .HasDatabaseName("ix_cuota_prestamo_prestamo_id_periodo_corte");
+
+                    b.ToTable("cuota_prestamo", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_cuota_prestamo_importe", "importe > 0");
+                        });
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Prestamos.Domain.Prestamo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date")
+                        .HasColumnName("fecha");
+
+                    b.Property<decimal>("Monto")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("monto");
+
+                    b.Property<string>("Observaciones")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("observaciones");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_prestamo");
+
+                    b.HasIndex("ColaboradorId")
+                        .HasDatabaseName("ix_prestamo_colaborador_id");
+
+                    b.ToTable("prestamo", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_prestamo_monto", "monto > 0");
+                        });
                 });
 
             modelBuilder.Entity("rps_backend.Features.Proyectos.Domain.Asignacion", b =>
@@ -1687,6 +1789,26 @@ namespace rps_backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_liquidacion_colaborador_rps_colaborador_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Prestamos.Domain.CuotaPrestamo", b =>
+                {
+                    b.HasOne("rps_backend.Features.Prestamos.Domain.Prestamo", null)
+                        .WithMany()
+                        .HasForeignKey("PrestamoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_cuota_prestamo_prestamo_prestamo_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Prestamos.Domain.Prestamo", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_prestamo_colaborador_rps_colaborador_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Proyectos.Domain.Asignacion", b =>

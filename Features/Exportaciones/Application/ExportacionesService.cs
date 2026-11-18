@@ -111,14 +111,15 @@ public class ExportacionesService(RpsDbContext db)
             var resumen = new HojaExcel(
                 "Consolidado", "Liquidaciones de honorarios · Consolidado", subtitulo,
                 ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
-                 "Cuotas de anticipos", "A pagar", "Revisada"],
+                 "Cuotas de anticipos", "Cuotas de préstamos", "A pagar", "Revisada"],
                 liquidaciones.Select(l => new object?[]
                 {
                     l.Colaborador, l.Identificacion, l.Clasificacion ?? "Sin clasificar", ReportesPdf.NombreMes(l.Periodo),
-                    l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.APagar, l.Revisado ? "Sí" : "Pendiente"
+                    l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.DescuentoPrestamos, l.APagar, l.Revisado ? "Sí" : "Pendiente"
                 }).ToList(),
                 ["Totales", null, null, null, liquidaciones.Sum(l => l.NetoConsolidado), liquidaciones.Sum(l => l.Quincena),
-                 liquidaciones.Sum(l => l.FinDeMes), liquidaciones.Sum(l => l.RecuperacionAnticipos), liquidaciones.Sum(l => l.APagar), null],
+                 liquidaciones.Sum(l => l.FinDeMes), liquidaciones.Sum(l => l.RecuperacionAnticipos), liquidaciones.Sum(l => l.DescuentoPrestamos),
+                 liquidaciones.Sum(l => l.APagar), null],
                 "No hay liquidaciones para este período.");
             contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [resumen]);
         }
@@ -323,7 +324,7 @@ public class ExportacionesService(RpsDbContext db)
                 Filas = filas.Select(l => new
                 {
                     l.Colaborador, l.Identificacion, l.Clasificacion, l.Periodo, l.NetoConsolidado,
-                    l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.APagar, l.Revisado
+                    l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.DescuentoPrestamos, l.APagar, l.Revisado
                 })
             });
 
@@ -428,7 +429,7 @@ public class ExportacionesService(RpsDbContext db)
             var detalleCortes = deLaLiquidacion.Select(c => new DetalleCortePdf(
                 c.Tipo == TipoCorte.Quincena ? "Quincena" : "Fin de mes",
                 c.Tipo == TipoCorte.Quincena ? $"1 – 15 {mes}" : $"{(tieneQuincena ? 16 : 1)} – {finPeriodo.Day} {mes}",
-                c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado)).ToList();
+                c.ValorBase, c.RecuperacionAdicional, c.DescuentoPrestamos, c.ValorPreparado)).ToList();
 
             return new FilaLiquidacionPdf(
                 string.IsNullOrEmpty(nombre) ? $"ID TMR {l.TmrColaboradorId}" : nombre,
@@ -439,6 +440,7 @@ public class ExportacionesService(RpsDbContext db)
                 deLaLiquidacion.Where(c => c.Tipo == TipoCorte.Quincena).Sum(c => c.ValorPreparado),
                 deLaLiquidacion.Where(c => c.Tipo == TipoCorte.FinDeMes).Sum(c => c.ValorPreparado),
                 deLaLiquidacion.Sum(c => c.RecuperacionAdicional),
+                deLaLiquidacion.Sum(c => c.DescuentoPrestamos),
                 deLaLiquidacion.Count > 0 ? deLaLiquidacion.Sum(c => c.ValorPreparado) : l.NetoConsolidado,
                 l.Revisado,
                 honorarios.GetValueOrDefault(l.Id) ?? [],

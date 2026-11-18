@@ -15,7 +15,7 @@ public static class LiquidacionesExcel
     private static readonly string[] EncabezadosHonorarios =
         ["Proyecto", "Modalidad", "Días", "Proporcional", "Subtotal", "IVA", "Total doc.", "Ret. fuente", "Ret. IVA", "Total ret.", "Neto"];
 
-    private static readonly string[] EncabezadosCortes = ["Corte", "Días", "Base", "Cuotas anticipos", "Valor preparado"];
+    private static readonly string[] EncabezadosCortes = ["Corte", "Días", "Base", "Cuotas anticipos", "Cuotas préstamos", "Valor preparado"];
 
     public static byte[] PorColaborador(
         string razonSocial, string ruc, string subtitulo, IReadOnlyList<FilaLiquidacionPdf> filas, bool porMes)
@@ -75,11 +75,12 @@ public static class LiquidacionesExcel
                 foreach (var k in f.Cortes)
                 {
                     Escribir(hoja, fila++, [
-                        k.Corte, k.Rango, k.ValorBase, k.CuotasAnticipos == 0 ? null : -k.CuotasAnticipos, k.ValorPreparado
+                        k.Corte, k.Rango, k.ValorBase, k.CuotasAnticipos == 0 ? null : -k.CuotasAnticipos,
+                        k.CuotasPrestamos == 0 ? null : -k.CuotasPrestamos, k.ValorPreparado
                     ]);
                     hoja.Cell(fila - 1, EncabezadosCortes.Length).Style.Font.SetBold();
                 }
-                Escribir(hoja, fila, ["A pagar", null, null, null, f.APagar]);
+                Escribir(hoja, fila, ["A pagar", null, null, null, null, f.APagar]);
                 var total = hoja.Range(fila, 1, fila, EncabezadosCortes.Length);
                 total.Style.Font.SetBold().Fill.SetBackgroundColor(FondoCabecera);
                 total.Style.Border.SetTopBorder(XLBorderStyleValues.Medium).Border.SetTopBorderColor(Marino);

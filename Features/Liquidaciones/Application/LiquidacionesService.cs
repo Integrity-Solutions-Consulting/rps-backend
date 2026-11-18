@@ -135,6 +135,7 @@ public class LiquidacionesService(RpsDbContext db)
         var generadas = 0;
         var actualizadas = 0;
         var eliminadas = 0;
+        var liquidacionesNuevas = new HashSet<Guid>();
         foreach (var colaboradorId in colaboradorIds)
         {
             var grupo = honorariosNuevos.Where(h => h.ColaboradorId == colaboradorId).ToList();
@@ -160,6 +161,7 @@ public class LiquidacionesService(RpsDbContext db)
             {
                 liquidacion = new Liquidacion { ColaboradorId = colaboradorId, Periodo = periodo, NetoConsolidado = netoConsolidado };
                 db.Liquidaciones.Add(liquidacion);
+                liquidacionesNuevas.Add(liquidacion.Id);
                 generadas++;
             }
             else
@@ -244,6 +246,14 @@ public class LiquidacionesService(RpsDbContext db)
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Préstamos: se descuentan después de los anticipos, sin dejar el pago negativo; lo que no
+        // alcanza pasa al siguiente pago. Se recorre todo el historial del colaborador porque un
+        // cambio en este mes mueve lo que queda pendiente para los siguientes.
+        foreach (var colaboradorId in colaboradorIds)
+            await PrestamosEnCortes.RecalcularAsync(db, colaboradorId, ct, liquidacionesNuevas);
+        await db.SaveChangesAsync(ct);
+
         await tx.CommitAsync(ct);
 
         return new GenerarLiquidacionesResponse(generadas, actualizadas, honorariosNuevos.Count, eliminadas);
@@ -360,7 +370,8 @@ public class LiquidacionesService(RpsDbContext db)
     }
 
     private static CorteResponse ACorteResponse(Corte c) => new(
-        c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado, c.RecuperacionNoAplicada, c.AjustePorProrrateo);
+        c.Id, c.Tipo, c.ValorBase, c.RecuperacionAdicional, c.ValorPreparado, c.RecuperacionNoAplicada, c.AjustePorProrrateo,
+        c.DescuentoPrestamos);
 
     private static LiquidacionResponse AResponse(Liquidacion l, List<CorteResponse> cortes) => new(
         l.Id, l.ColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado, l.RevisadoEn, l.RevisadoPorUsuarioId, l.CreadoEn, cortes,

@@ -17,8 +17,12 @@ public class Corte
 
     public decimal RecuperacionAdicional { get; set; }
 
-    // ValorBase - RecuperacionAdicional, nunca negativo (RN 47).
+    // Lo que se le paga: ValorBase - RecuperacionAdicional - DescuentoPrestamos, nunca negativo (RN 47).
     public decimal ValorPreparado { get; set; }
+
+    // Cuotas de préstamos descontadas en este corte (después de los anticipos). Nunca más de lo que
+    // queda por pagar en el corte: lo que no alcanza pasa al siguiente pago (ver PrestamosEnCortes).
+    public decimal DescuentoPrestamos { get; set; }
 
     // Max(RecuperacionAdicional - ValorBase, 0): cuánto de la recuperación programada no cupo en
     // este corte. "Saldo insuficiente por salida": se muestra, nunca se oculta ni se da por

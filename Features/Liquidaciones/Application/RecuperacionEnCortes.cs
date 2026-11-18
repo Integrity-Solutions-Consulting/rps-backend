@@ -53,5 +53,9 @@ public static class RecuperacionEnCortes
 
         if (detalles.Count > 0)
             liquidacion.RegistrarModificacion($"Cambió el descuento por anticipos ({string.Join(", ", detalles)})");
+
+        // Aplicar() deja ValorPreparado sin los préstamos: se vuelven a descontar sobre lo que quedó
+        // después de los anticipos (y se reacomoda lo que pasa al siguiente pago).
+        await PrestamosEnCortes.RecalcularAsync(db, colaboradorId, ct);
     }
 }
