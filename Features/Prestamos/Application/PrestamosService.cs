@@ -90,7 +90,7 @@ public class PrestamosService(RpsDbContext db)
         if (!colaborador.Activo)
             return PrestamoErrores.ColaboradorDesactivado;
 
-        var error = await ValidarPlanAsync(colaboradorId, fecha, request.Monto!.Value, request.Cuotas, [], ct);
+        var error = ValidarPlan(fecha, request.Monto!.Value, request.Cuotas, []);
         if (error is not null)
             return error;
 
@@ -135,7 +135,7 @@ public class PrestamosService(RpsDbContext db)
         var existentes = await db.CuotasPrestamo.Where(c => c.PrestamoId == prestamoId).ToListAsync(ct);
         var bloqueadas = existentes.Where(c => CuotaPrestamo.FechaDeCobro(c.Periodo, c.Corte) <= hoy).ToList();
 
-        var error = await ValidarPlanAsync(colaboradorId, prestamo.Fecha, request.Monto!.Value, request.Cuotas, bloqueadas, ct);
+        var error = ValidarPlan(prestamo.Fecha, request.Monto!.Value, request.Cuotas, bloqueadas);
         if (error is not null)
             return error;
 
@@ -187,9 +187,8 @@ public class PrestamosService(RpsDbContext db)
 
     // Valida el plan de pagos completo. `bloqueadas`: cuotas ya guardadas cuya fecha llegó; tienen
     // que venir iguales (mismo mes, corte e importe) y no se revalidan sus fechas.
-    private async Task<Error?> ValidarPlanAsync(
-        Guid colaboradorId, DateOnly fechaPrestamo, decimal monto, List<CuotaPrestamoInput>? cuotas,
-        List<CuotaPrestamo> bloqueadas, CancellationToken ct)
+    private static Error? ValidarPlan(
+        DateOnly fechaPrestamo, decimal monto, List<CuotaPrestamoInput>? cuotas, List<CuotaPrestamo> bloqueadas)
     {
         if (cuotas is null || cuotas.Count == 0)
             return PrestamoErrores.CuotasRequeridas;
@@ -231,9 +230,8 @@ public class PrestamosService(RpsDbContext db)
             if (fechaCobro <= hoy)
                 return PrestamoErrores.FechaYaPaso(fechaCobro);
 
-            // Una quincena de alguien que ese mes cobra solo a fin de mes nunca tendría corte.
-            if (corte == TipoCorte.Quincena && await FrecuenciaAsync(colaboradorId, periodo, ct) != Frecuencia.DosPagos)
-                return PrestamoErrores.CorteIncompatibleConFrecuencia(periodo);
+            // Quincena o fin de mes se eligen libremente. Si ese mes el colaborador cobra solo a fin de
+            // mes, la cuota de la quincena se descuenta en su pago de fin de mes (ver PrestamosEnCortes).
         }
 
         return null;

@@ -198,12 +198,11 @@ public class SincronizacionTmrService(
                     TiposContratoTmr.Describir(colaborador.TipoContratoTmr), TiposContratoTmr.Describir(dto.TipoContrato), null, ahora));
             colaborador.TipoContratoTmr = dto.TipoContrato;
 
-            // CON/PAS fijan Profesional/Junior (cambia la retención de IVA). MT/COS: la elige Contabilidad.
-            if (TiposContratoTmr.ClasificacionFija(dto.TipoContrato) is { } fija && colaborador.Clasificacion != fija)
+            // CON/PAS proponen Profesional/Junior (cambia la retención de IVA); MT/COS: la elige Contabilidad.
+            // Solo se pone si RPS todavía no tiene una: lo elegido en RPS se respeta. Si TMR cambia el
+            // tipo de contrato, queda el aviso de arriba para que Contabilidad lo revise.
+            if (colaborador.Clasificacion is null && TiposContratoTmr.ClasificacionFija(dto.TipoContrato) is { } fija)
             {
-                if (!esNuevo && !avisoTipo && colaborador.Clasificacion is { } elegida)
-                    cambios.Add(NuevoCambio(TipoCambioTmr.TipoContrato, colaborador.Id, null,
-                        $"{elegida} (elegido en RPS)", $"{fija} (según TMR)", null, ahora));
                 colaborador.Clasificacion = fija;
                 await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
             }

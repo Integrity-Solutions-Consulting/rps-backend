@@ -63,10 +63,7 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
         if (!colaborador.Activo)
             return ColaboradorErrores.Desactivado;
 
-        // CON/PAS: la clasificación viene de TMR y la sincronización la volvería a poner.
-        if (TiposContratoTmr.ClasificacionFija(colaborador.TipoContratoTmr) is { } fija && fija != request.Clasificacion)
-            return ColaboradorErrores.ClasificacionLaDefineTmr;
-
+        // Se puede cambiar aunque TMR la proponga (CON/PAS): la sincronización respeta lo elegido en RPS.
         colaborador.Clasificacion = request.Clasificacion;
         await ColaboradorEstado.RecalcularAsync(colaborador, db, ct);
         await db.SaveChangesAsync(ct);
@@ -319,7 +316,8 @@ public class ColaboradoresService(RpsDbContext db, CuentaBancariaProtector prote
             frecuenciaVigente,
             cuenta is null ? null : ACuentaResponse(cuenta),
             colaborador.TipoContratoTmr,
-            TiposContratoTmr.ClasificacionFija(colaborador.TipoContratoTmr) is not null);
+            // "Según TMR" solo si lo guardado coincide con lo que propone TMR (CON/PAS); si se cambió en RPS, no.
+            TiposContratoTmr.ClasificacionFija(colaborador.TipoContratoTmr) is { } fija && fija == colaborador.Clasificacion);
     }
 
     private CuentaBancariaResponse ACuentaResponse(CuentaBancaria cuenta) =>
