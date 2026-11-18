@@ -56,6 +56,9 @@ builder.Services.AddScoped<AuditoriaInterceptor>();
 builder.Services.AddDbContext<RpsDbContext>((sp, options) =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
     .UseSnakeCaseNamingConvention()
+    // La migración Prestamos se escribió sin las herramientas de EF; su snapshot puede diferir en algún
+    // detalle del modelo. Sin esto, --migrate se detiene con PendingModelChangesWarning.
+    .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning))
     .AddInterceptors(sp.GetRequiredService<AuditoriaInterceptor>()));
 
 // ── Autenticación JWT ──
