@@ -9,7 +9,8 @@ namespace rps_backend.Features.Exportaciones.Application;
 public record FilaLiquidacionPdf(
     string Colaborador, string? Identificacion, string? Clasificacion, DateOnly Periodo,
     decimal NetoConsolidado, decimal Quincena, decimal FinDeMes, decimal RecuperacionAnticipos, decimal DescuentoPrestamos, decimal APagar, bool Revisado,
-    IReadOnlyList<DetalleHonorarioPdf> Honorarios, IReadOnlyList<DetalleCortePdf> Cortes);
+    IReadOnlyList<DetalleHonorarioPdf> Honorarios, IReadOnlyList<DetalleCortePdf> Cortes,
+    decimal SaldoPrestamos = 0m);
 
 // Un honorario de la liquidación: un proyecto (pago por proyecto) o el contrato (pago por contrato).
 public record DetalleHonorarioPdf(
@@ -30,6 +31,8 @@ public record ReporteLiquidacionesPdf(
 public enum VistaLiquidaciones { Consolidado, PorColaborador }
 
 // PDF formal de liquidaciones: logo, encabezado con datos de la empresa, tabla y totales.
+// Es un documento formal: ningún valor se muestra en negativo. Retenciones, anticipos y abonos a
+// préstamos van en positivo en su propia columna y el resultado es el "Total neto a pagar".
 // Logo: si existe Assets/logo.png junto al ejecutable se usa ese archivo; si no, se dibuja el distintivo "RPS".
 public static class LiquidacionesPdf
 {
@@ -109,8 +112,8 @@ public static class LiquidacionesPdf
                 row.AutoItem().AlignMiddle().AlignRight().Column(titulo =>
                 {
                     titulo.Item().AlignRight().Text(r.Vista == VistaLiquidaciones.Consolidado
-                        ? "Liquidaciones de honorarios · Consolidado"
-                        : "Liquidaciones de honorarios · Por colaborador").FontSize(15).Bold().FontColor(Marino);
+                        ? "Pagos del mes · Consolidado"
+                        : "Pagos del mes · Por colaborador").FontSize(15).Bold().FontColor(Marino);
                     titulo.Item().AlignRight().Text(r.Periodo is { } p ? NombreMes(p) : "Todos los períodos").FontSize(11).FontColor(Verde);
                     titulo.Item().AlignRight().Text($"{revisadas} de {r.Filas.Count} revisadas · Moneda {r.Moneda}").FontColor(Gris);
                 });
@@ -167,8 +170,8 @@ public static class LiquidacionesPdf
                 Cabecera(h.Cell(), "Quincena", derecha: true);
                 Cabecera(h.Cell(), "Fin de mes", derecha: true);
                 Cabecera(h.Cell(), "Recup. anticipos", derecha: true);
-                Cabecera(h.Cell(), "Préstamos", derecha: true);
-                Cabecera(h.Cell(), "A pagar", derecha: true);
+                Cabecera(h.Cell(), "Abono préstamo", derecha: true);
+                Cabecera(h.Cell(), "Neto a pagar", derecha: true);
                 Cabecera(h.Cell(), "Revisado");
             });
 
@@ -184,8 +187,8 @@ public static class LiquidacionesPdf
                 Celda(t.Cell(), Monto(f.NetoConsolidado), derecha: true);
                 Celda(t.Cell(), f.Quincena == 0 ? "—" : Monto(f.Quincena), derecha: true);
                 Celda(t.Cell(), Monto(f.FinDeMes), derecha: true);
-                Celda(t.Cell(), f.RecuperacionAnticipos == 0 ? "—" : "-" + Monto(f.RecuperacionAnticipos), derecha: true);
-                Celda(t.Cell(), f.DescuentoPrestamos == 0 ? "—" : "-" + Monto(f.DescuentoPrestamos), derecha: true);
+                Celda(t.Cell(), f.RecuperacionAnticipos == 0 ? "—" : Monto(f.RecuperacionAnticipos), derecha: true);
+                Celda(t.Cell(), f.DescuentoPrestamos == 0 ? "—" : Monto(f.DescuentoPrestamos), derecha: true);
                 Celda(t.Cell(), Monto(f.APagar), derecha: true, negrita: true);
                 Celda(t.Cell(), f.Revisado ? "Sí" : "Pendiente");
             }
@@ -195,8 +198,8 @@ public static class LiquidacionesPdf
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.NetoConsolidado))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.Quincena))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.FinDeMes))).Bold();
-            t.Cell().Element(Total).AlignRight().Text("-" + Monto(r.Filas.Sum(f => f.RecuperacionAnticipos))).Bold();
-            t.Cell().Element(Total).AlignRight().Text("-" + Monto(r.Filas.Sum(f => f.DescuentoPrestamos))).Bold();
+            t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.RecuperacionAnticipos))).Bold();
+            t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.DescuentoPrestamos))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.APagar))).Bold().FontColor(Verde);
             t.Cell().Element(Total);
         });
@@ -250,9 +253,9 @@ public static class LiquidacionesPdf
                     Celda(t.Cell(), Monto(h.Subtotal), derecha: true);
                     Celda(t.Cell(), Monto(h.Iva), derecha: true);
                     Celda(t.Cell(), Monto(h.TotalDocumento), derecha: true);
-                    Celda(t.Cell(), "-" + Monto(h.RetencionFuente), derecha: true);
-                    Celda(t.Cell(), "-" + Monto(h.RetencionIva), derecha: true);
-                    Celda(t.Cell(), "-" + Monto(h.TotalRetenciones), derecha: true);
+                    Celda(t.Cell(), Monto(h.RetencionFuente), derecha: true);
+                    Celda(t.Cell(), Monto(h.RetencionIva), derecha: true);
+                    Celda(t.Cell(), Monto(h.TotalRetenciones), derecha: true);
                     Celda(t.Cell(), Monto(h.Neto), derecha: true, negrita: true);
                 }
             });
@@ -277,7 +280,7 @@ public static class LiquidacionesPdf
                         Cabecera(h.Cell(), "Días");
                         Cabecera(h.Cell(), "Base", derecha: true);
                         Cabecera(h.Cell(), "Cuotas anticipos", derecha: true);
-                        Cabecera(h.Cell(), "Cuotas préstamos", derecha: true);
+                        Cabecera(h.Cell(), "Abono préstamo", derecha: true);
                         Cabecera(h.Cell(), "Valor preparado", derecha: true);
                     });
                     foreach (var k in f.Cortes)
@@ -285,10 +288,36 @@ public static class LiquidacionesPdf
                         Celda(t.Cell(), k.Corte);
                         Celda(t.Cell(), k.Rango);
                         Celda(t.Cell(), Monto(k.ValorBase), derecha: true);
-                        Celda(t.Cell(), k.CuotasAnticipos == 0 ? "—" : "-" + Monto(k.CuotasAnticipos), derecha: true);
-                        Celda(t.Cell(), k.CuotasPrestamos == 0 ? "—" : "-" + Monto(k.CuotasPrestamos), derecha: true);
+                        Celda(t.Cell(), k.CuotasAnticipos == 0 ? "—" : Monto(k.CuotasAnticipos), derecha: true);
+                        Celda(t.Cell(), k.CuotasPrestamos == 0 ? "—" : Monto(k.CuotasPrestamos), derecha: true);
                         Celda(t.Cell(), Monto(k.ValorPreparado), derecha: true, negrita: true);
                     }
+                });
+            }
+
+            // Lo que recibe el colaborador, ya con anticipos y abonos a préstamos descontados.
+            col.Item().PaddingTop(6).Width(510).BorderTop(1).BorderColor(Marino).PaddingTop(4).Row(row =>
+            {
+                row.RelativeItem().Text("Total neto a pagar").Bold().FontColor(Marino);
+                row.AutoItem().Text(Monto(f.APagar)).Bold().FontColor(Verde);
+            });
+
+            // Préstamo: solo si el colaborador tiene uno (abonó este mes o todavía le queda saldo).
+            if (f.DescuentoPrestamos > 0 || f.SaldoPrestamos > 0)
+            {
+                col.Item().PaddingTop(6).Width(510).Background(FondoCabecera).Padding(5).Column(p =>
+                {
+                    p.Item().Text("Préstamo").Bold().FontColor(Marino);
+                    p.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text("Abono de este mes");
+                        row.AutoItem().Text(Monto(f.DescuentoPrestamos));
+                    });
+                    p.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text("Saldo pendiente del préstamo");
+                        row.AutoItem().Text(Monto(f.SaldoPrestamos)).Bold();
+                    });
                 });
             }
         });

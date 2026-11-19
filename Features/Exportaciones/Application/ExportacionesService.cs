@@ -109,9 +109,9 @@ public class ExportacionesService(RpsDbContext db)
         else
         {
             var resumen = new HojaExcel(
-                "Consolidado", "Liquidaciones de honorarios · Consolidado", subtitulo,
+                "Consolidado", "Pagos del mes · Consolidado", subtitulo,
                 ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
-                 "Cuotas de anticipos", "Cuotas de préstamos", "A pagar", "Revisada"],
+                 "Cuotas de anticipos", "Abono a préstamos", "Total neto a pagar", "Revisada"],
                 liquidaciones.Select(l => new object?[]
                 {
                     l.Colaborador, l.Identificacion, l.Clasificacion ?? "Sin clasificar", ReportesPdf.NombreMes(l.Periodo),
@@ -148,7 +148,7 @@ public class ExportacionesService(RpsDbContext db)
 
     // liquidaciones_consolidado_2026-11.pdf · liquidaciones_por_colaborador_todas.xlsx
     private static string NombreArchivoLiquidaciones(DateOnly? periodo, VistaLiquidaciones vista, string extension) =>
-        $"liquidaciones_{(vista == VistaLiquidaciones.PorColaborador ? "por_colaborador" : "consolidado")}_{(periodo is null ? "todas" : periodo.Value.ToString("yyyy-MM"))}.{extension}";
+        $"pagos_del_mes_{(vista == VistaLiquidaciones.PorColaborador ? "por_colaborador" : "consolidado")}_{(periodo is null ? "todas" : periodo.Value.ToString("yyyy-MM"))}.{extension}";
 
     // Excel de colaboradores: las mismas columnas que el PDF. Sin cuentas bancarias (están cifradas).
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresAsync(Guid usuarioId, CancellationToken ct)
@@ -395,7 +395,7 @@ public class ExportacionesService(RpsDbContext db)
         var liquidaciones = await query
             .Join(db.ColaboradoresRps.AsNoTracking(), l => l.ColaboradorId, c => c.Id, (l, c) => new
             {
-                l.Id, l.Periodo, l.NetoConsolidado, l.Revisado,
+                l.Id, l.ColaboradorId, l.Periodo, l.NetoConsolidado, l.Revisado,
                 c.TmrColaboradorId, c.Nombres, c.Apellidos, c.Identificacion, c.Clasificacion
             })
             .OrderBy(f => f.Periodo).ThenBy(f => f.Apellidos).ThenBy(f => f.TmrColaboradorId)
@@ -419,9 +419,25 @@ public class ExportacionesService(RpsDbContext db)
                 x.h.ProporcionalAcordado, x.h.Subtotal, x.h.Iva, x.h.TotalDocumento, x.h.RetencionFuente, x.h.RetencionIva,
                 x.h.TotalRetenciones, x.h.Neto)).ToList());
 
+        // Saldo de préstamos al cierre de cada liquidación: lo prestado hasta el fin de ese mes menos lo
+        // descontado en las liquidaciones hasta ese mes (incluida). Solo se muestra si tiene préstamos.
+        var colaboradorIds = liquidaciones.Select(l => l.ColaboradorId).Distinct().ToList();
+        var prestamos = await db.Prestamos.AsNoTracking()
+            .Where(p => colaboradorIds.Contains(p.ColaboradorId))
+            .Select(p => new { p.ColaboradorId, p.Fecha, p.Monto })
+            .ToListAsync(ct);
+        var descontadoPorMes = await db.Liquidaciones.AsNoTracking()
+            .Where(l => colaboradorIds.Contains(l.ColaboradorId))
+            .Join(db.Cortes.AsNoTracking(), l => l.Id, c => c.LiquidacionId, (l, c) => new { l.ColaboradorId, l.Periodo, c.DescuentoPrestamos })
+            .ToListAsync(ct);
+
         return liquidaciones.Select(l =>
         {
             var deLaLiquidacion = cortes.GetValueOrDefault(l.Id) ?? [];
+            var finDelMes = l.Periodo.AddMonths(1).AddDays(-1);
+            var prestado = prestamos.Where(p => p.ColaboradorId == l.ColaboradorId && p.Fecha <= finDelMes).Sum(p => p.Monto);
+            var descontado = descontadoPorMes.Where(d => d.ColaboradorId == l.ColaboradorId && d.Periodo <= l.Periodo).Sum(d => d.DescuentoPrestamos);
+            var saldoPrestamos = Math.Max(prestado - descontado, 0m);
             var nombre = $"{l.Nombres} {l.Apellidos}".Trim();
             var finPeriodo = l.Periodo.AddMonths(1).AddDays(-1);
             var mes = MesesCortos[l.Periodo.Month - 1];
@@ -444,7 +460,8 @@ public class ExportacionesService(RpsDbContext db)
                 deLaLiquidacion.Count > 0 ? deLaLiquidacion.Sum(c => c.ValorPreparado) : l.NetoConsolidado,
                 l.Revisado,
                 honorarios.GetValueOrDefault(l.Id) ?? [],
-                detalleCortes);
+                detalleCortes,
+                saldoPrestamos);
         }).ToList();
     }
 

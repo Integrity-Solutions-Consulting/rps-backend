@@ -5,6 +5,7 @@ namespace rps_backend.Features.Exportaciones.Application;
 // Excel de liquidaciones "por colaborador": una sola hoja con un bloque por colaborador, igual que
 // el PDF por colaborador — encabezado (nombre, identificación, clasificación, neto consolidado,
 // revisión), tabla de honorarios con impuestos y retenciones, y tabla de cortes con anticipos.
+// Documento formal: ningún valor en negativo; las deducciones van en positivo en su columna.
 public static class LiquidacionesExcel
 {
     private const string FormatoMonto = "#,##0.00";
@@ -15,7 +16,7 @@ public static class LiquidacionesExcel
     private static readonly string[] EncabezadosHonorarios =
         ["Proyecto", "Modalidad", "Días", "Proporcional", "Subtotal", "IVA", "Total doc.", "Ret. fuente", "Ret. IVA", "Total ret.", "Neto"];
 
-    private static readonly string[] EncabezadosCortes = ["Corte", "Días", "Base", "Cuotas anticipos", "Cuotas préstamos", "Valor preparado"];
+    private static readonly string[] EncabezadosCortes = ["Corte", "Días", "Base", "Cuotas anticipos", "Abono préstamo", "Valor preparado"];
 
     public static byte[] PorColaborador(
         string razonSocial, string ruc, string subtitulo, IReadOnlyList<FilaLiquidacionPdf> filas, bool porMes)
@@ -26,7 +27,7 @@ public static class LiquidacionesExcel
         hoja.Cell(1, 1).Value = string.IsNullOrWhiteSpace(razonSocial) ? "Empresa sin configurar" : razonSocial;
         hoja.Cell(1, 1).Style.Font.SetBold().Font.SetFontSize(13).Font.SetFontColor(Marino);
         hoja.Cell(2, 1).Value = $"RUC {(string.IsNullOrWhiteSpace(ruc) ? "—" : ruc)}";
-        hoja.Cell(3, 1).Value = "Liquidaciones de honorarios · Por colaborador";
+        hoja.Cell(3, 1).Value = "Pagos del mes · Por colaborador";
         hoja.Cell(3, 1).Style.Font.SetBold().Font.SetFontSize(12);
         hoja.Cell(4, 1).Value = subtitulo;
         hoja.Cell(5, 1).Value = $"Generado el {Shared.HoraEcuador.Ahora:dd/MM/yyyy HH:mm} · Documento de control interno; no es comprobante de pago.";
@@ -62,7 +63,7 @@ public static class LiquidacionesExcel
             {
                 Escribir(hoja, fila++, [
                     h.Proyecto, h.Modalidad, $"{h.DiasReconocidos}/{h.DiasReales}", h.ProporcionalAcordado, h.Subtotal, h.Iva,
-                    h.TotalDocumento, -h.RetencionFuente, -h.RetencionIva, -h.TotalRetenciones, h.Neto
+                    h.TotalDocumento, h.RetencionFuente, h.RetencionIva, h.TotalRetenciones, h.Neto
                 ]);
                 hoja.Cell(fila - 1, EncabezadosHonorarios.Length).Style.Font.SetBold();
             }
@@ -75,16 +76,29 @@ public static class LiquidacionesExcel
                 foreach (var k in f.Cortes)
                 {
                     Escribir(hoja, fila++, [
-                        k.Corte, k.Rango, k.ValorBase, k.CuotasAnticipos == 0 ? null : -k.CuotasAnticipos,
-                        k.CuotasPrestamos == 0 ? null : -k.CuotasPrestamos, k.ValorPreparado
+                        k.Corte, k.Rango, k.ValorBase, k.CuotasAnticipos == 0 ? null : k.CuotasAnticipos,
+                        k.CuotasPrestamos == 0 ? null : k.CuotasPrestamos, k.ValorPreparado
                     ]);
                     hoja.Cell(fila - 1, EncabezadosCortes.Length).Style.Font.SetBold();
                 }
-                Escribir(hoja, fila, ["A pagar", null, null, null, null, f.APagar]);
-                var total = hoja.Range(fila, 1, fila, EncabezadosCortes.Length);
-                total.Style.Font.SetBold().Fill.SetBackgroundColor(FondoCabecera);
-                total.Style.Border.SetTopBorder(XLBorderStyleValues.Medium).Border.SetTopBorderColor(Marino);
+            }
+
+            // Lo que recibe el colaborador, ya con anticipos y abonos a préstamos descontados.
+            Escribir(hoja, fila, ["Total neto a pagar", null, null, null, null, f.APagar]);
+            var total = hoja.Range(fila, 1, fila, EncabezadosCortes.Length);
+            total.Style.Font.SetBold().Fill.SetBackgroundColor(FondoCabecera);
+            total.Style.Border.SetTopBorder(XLBorderStyleValues.Medium).Border.SetTopBorderColor(Marino);
+            fila++;
+
+            // Préstamo: solo si el colaborador tiene uno (abonó este mes o todavía le queda saldo).
+            if (f.DescuentoPrestamos > 0 || f.SaldoPrestamos > 0)
+            {
                 fila++;
+                hoja.Cell(fila, 1).Value = "Préstamo";
+                hoja.Cell(fila++, 1).Style.Font.SetBold().Font.SetFontColor(Marino);
+                Escribir(hoja, fila++, ["Abono de este mes", null, null, null, null, f.DescuentoPrestamos]);
+                Escribir(hoja, fila, ["Saldo pendiente del préstamo", null, null, null, null, f.SaldoPrestamos]);
+                hoja.Cell(fila++, EncabezadosCortes.Length).Style.Font.SetBold();
             }
 
             fila += 2; // espacio antes del siguiente colaborador
