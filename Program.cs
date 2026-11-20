@@ -134,6 +134,7 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UsuariosService>();
 builder.Services.AddScoped<RolesService>();
+builder.Services.AddScoped<PermisosUsuarioService>();
 // Sin Tmr:BaseUrl la app arranca igual: solo la sincronización responde que TMR no está disponible.
 builder.Services.AddHttpClient<ITmrGateway, TmrHttpGateway>(client =>
 {
@@ -266,6 +267,9 @@ app.Use(async (context, next) =>
 });
 
 app.UseAuthorization();
+
+// Permisos por módulo (Configuración > Roles): ver Features/Auth/Api/PermisosModuloMiddleware.cs.
+app.UseMiddleware<PermisosModuloMiddleware>();
 
 // Después de autenticar/autorizar: solo las peticiones que ya pasaron esos filtros pueden
 // quedar guardadas como respuesta "repetible" (RC 04 — doble clic / reintento de red).

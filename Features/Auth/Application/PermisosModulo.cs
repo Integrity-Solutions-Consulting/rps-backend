@@ -7,8 +7,10 @@ public static class PermisosModulo
     public const string RolAdministradorContable = "Administrador Contable";
     public const string RolAsistenteContable = "Asistente Contable";
 
+    // "configuracion": la pantalla Configuración entera (datos de la empresa, feriados, auditoría,
+    // usuarios y roles). Sin él, la cuenta no la ve.
     public static readonly string[] Todos =
-        ["colaboradores", "contratos", "anticipos", "prestamos", "liquidaciones", "exportaciones"];
+        ["colaboradores", "contratos", "anticipos", "prestamos", "liquidaciones", "exportaciones", "configuracion"];
 
     public static IReadOnlyList<string> PorDefecto(string rol) => rol switch
     {

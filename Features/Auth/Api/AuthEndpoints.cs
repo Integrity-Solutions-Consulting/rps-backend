@@ -57,6 +57,13 @@ public static class AuthEndpoints
             .RequireAuthorization()
             .Produces<UsuarioResponse>();
 
+        // Módulos que puede usar el usuario en sesión; el frontend arma el menú y protege sus rutas con esto.
+        // Se leen de la base (no del token): un cambio de permisos se nota al volver a pedirlos.
+        group.MapGet("/permisos", async (ClaimsPrincipal user, PermisosUsuarioService permisos, CancellationToken ct) =>
+                TypedResults.Ok(await permisos.ListarAsync(ObtenerUsuarioId(user), ct)))
+            .RequireAuthorization()
+            .Produces<List<string>>();
+
         return app;
     }
 

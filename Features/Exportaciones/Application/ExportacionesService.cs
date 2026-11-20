@@ -109,7 +109,7 @@ public class ExportacionesService(RpsDbContext db)
         else
         {
             var resumen = new HojaExcel(
-                "Consolidado", "Pagos del mes · Consolidado", subtitulo,
+                "Consolidado", "Rol a pagar · Consolidado", subtitulo,
                 ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
                  "Cuotas de anticipos", "Abono a préstamos", "Total neto a pagar", "Revisada"],
                 liquidaciones.Select(l => new object?[]

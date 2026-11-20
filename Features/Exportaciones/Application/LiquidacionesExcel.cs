@@ -27,7 +27,7 @@ public static class LiquidacionesExcel
         hoja.Cell(1, 1).Value = string.IsNullOrWhiteSpace(razonSocial) ? "Empresa sin configurar" : razonSocial;
         hoja.Cell(1, 1).Style.Font.SetBold().Font.SetFontSize(13).Font.SetFontColor(Marino);
         hoja.Cell(2, 1).Value = $"RUC {(string.IsNullOrWhiteSpace(ruc) ? "—" : ruc)}";
-        hoja.Cell(3, 1).Value = "Pagos del mes · Por colaborador";
+        hoja.Cell(3, 1).Value = "Rol a pagar · Por colaborador";
         hoja.Cell(3, 1).Style.Font.SetBold().Font.SetFontSize(12);
         hoja.Cell(4, 1).Value = subtitulo;
         hoja.Cell(5, 1).Value = $"Generado el {Shared.HoraEcuador.Ahora:dd/MM/yyyy HH:mm} · Documento de control interno; no es comprobante de pago.";

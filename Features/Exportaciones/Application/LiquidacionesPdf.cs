@@ -112,8 +112,8 @@ public static class LiquidacionesPdf
                 row.AutoItem().AlignMiddle().AlignRight().Column(titulo =>
                 {
                     titulo.Item().AlignRight().Text(r.Vista == VistaLiquidaciones.Consolidado
-                        ? "Pagos del mes · Consolidado"
-                        : "Pagos del mes · Por colaborador").FontSize(15).Bold().FontColor(Marino);
+                        ? "Rol a pagar · Consolidado"
+                        : "Rol a pagar · Por colaborador").FontSize(15).Bold().FontColor(Marino);
                     titulo.Item().AlignRight().Text(r.Periodo is { } p ? NombreMes(p) : "Todos los períodos").FontSize(11).FontColor(Verde);
                     titulo.Item().AlignRight().Text($"{revisadas} de {r.Filas.Count} revisadas · Moneda {r.Moneda}").FontColor(Gris);
                 });
