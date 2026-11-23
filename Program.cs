@@ -263,6 +263,20 @@ app.Use(async (context, next) =>
         }
     }
 
+    // Sesión: desde el login la cierran aunque el token no haya vencido
+    // (límites en Jwt:SesionInactividadMinutos y Jwt:SesionDuracionMaximaHoras).
+    // Los tokens emitidos antes de este cambio no traen "sid": vencen solos en su hora.
+    var sid = context.User.FindFirst(TokenService.ClaimSesion)?.Value;
+    if (Guid.TryParse(sid, out var sesionId))
+    {
+        var auth = context.RequestServices.GetRequiredService<AuthService>();
+        if (!await auth.ValidarYRegistrarActividadAsync(sesionId, context.RequestAborted))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+    }
+
     await next();
 });
 

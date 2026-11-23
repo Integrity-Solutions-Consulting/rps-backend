@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using rps_backend.Features.Auth.Domain;
 using rps_backend.Persistence;
 using rps_backend.Shared;
@@ -6,13 +7,23 @@ using rps_backend.Shared;
 namespace rps_backend.Features.Auth.Application;
 
 // Reglas de autenticación. No conoce HTTP: devuelve Resultado y la capa Api decide el status code.
-public class AuthService(RpsDbContext db, TokenService tokenService)
+public class AuthService(RpsDbContext db, TokenService tokenService, IOptions<JwtSettings> jwtOptions)
 {
     private const int MaxIntentosFallidos = 5;
     private static readonly TimeSpan DuracionBloqueo = TimeSpan.FromMinutes(15);
 
+    // Correo: solo letras sin tilde, números y @ . _ - + (igual que el login del frontend).
+    private static readonly System.Text.RegularExpressions.Regex FormatoEmail =
+        new(@"^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$");
+
     public async Task<Resultado<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken ct)
     {
+        // Correo vacío, con caracteres raros (#$%&>...) o contraseña vacía: se responde como credenciales
+        // inválidas, sin consultar la base (antes un correo nulo daba error 500).
+        if (string.IsNullOrWhiteSpace(request.Email) || request.Email.Trim().Length > 150
+            || !FormatoEmail.IsMatch(request.Email.Trim()) || string.IsNullOrEmpty(request.Password))
+            return AuthErrores.CredencialesInvalidas;
+
         var email = request.Email.Trim().ToLowerInvariant();
         var usuario = await db.Usuarios.FirstOrDefaultAsync(u => u.Email == email, ct);
 
@@ -70,9 +81,20 @@ public class AuthService(RpsDbContext db, TokenService tokenService)
         if (usuario is null || !usuario.Activo)
             return AuthErrores.TokenInvalido;
 
-        tokenActual.Usado = true;
-
         var sesion = await db.Sesiones.FirstAsync(s => s.Id == tokenActual.SesionId, ct);
+
+        // El refresh token puede seguir vigente (7 días), pero la sesión no: 40 min sin uso u 8 h desde el login.
+        if (!SesionVigente(sesion, DateTime.UtcNow))
+        {
+            sesion.Activa = false;
+            await db.RefreshTokens
+                .Where(rt => rt.FamiliaToken == tokenActual.FamiliaToken)
+                .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.Revocado, true), ct);
+            await db.SaveChangesAsync(ct);
+            return AuthErrores.TokenInvalido;
+        }
+
+        tokenActual.Usado = true;
         sesion.UltimaActividad = DateTime.UtcNow;
 
         var roles = await ObtenerNombresRolesAsync(usuario.Id, ct);
@@ -80,6 +102,45 @@ public class AuthService(RpsDbContext db, TokenService tokenService)
 
         await db.SaveChangesAsync(ct);
         return respuesta;
+    }
+
+    // Llamado por el middleware de Program.cs en cada petición con token. Devuelve false si la sesión
+    // ya no es válida (cerrada, inactiva o pasada de la duración máxima) y en ese caso la cierra.
+    // Si sigue vigente, registra la actividad (como máximo una escritura por minuto por sesión).
+    public async Task<bool> ValidarYRegistrarActividadAsync(Guid sesionId, CancellationToken ct)
+    {
+        var sesion = await db.Sesiones.FirstOrDefaultAsync(s => s.Id == sesionId, ct);
+        if (sesion is null)
+            return false;
+
+        var ahora = DateTime.UtcNow;
+        if (!SesionVigente(sesion, ahora))
+        {
+            if (sesion.Activa)
+            {
+                sesion.Activa = false;
+                await db.RefreshTokens
+                    .Where(rt => rt.SesionId == sesion.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.Revocado, true), ct);
+                await db.SaveChangesAsync(ct);
+            }
+            return false;
+        }
+
+        if (ahora - sesion.UltimaActividad > TimeSpan.FromMinutes(1))
+        {
+            sesion.UltimaActividad = ahora;
+            await db.SaveChangesAsync(ct);
+        }
+        return true;
+    }
+
+    private bool SesionVigente(Sesion sesion, DateTime ahora)
+    {
+        var jwt = jwtOptions.Value;
+        return sesion.Activa
+            && ahora - sesion.UltimaActividad <= TimeSpan.FromMinutes(jwt.SesionInactividadMinutos)
+            && ahora - sesion.CreadoEn <= TimeSpan.FromHours(jwt.SesionDuracionMaximaHoras);
     }
 
     public async Task<Resultado<bool>> LogoutAsync(Guid usuarioId, string jti, DateTime accessTokenExpiraEn, string? refreshTokenCrudo, CancellationToken ct)
@@ -164,7 +225,7 @@ public class AuthService(RpsDbContext db, TokenService tokenService)
     // directamente del claim del token vigente (ver AuthEndpoints), no de la emisión original.
     private AuthResponse EmitirTokens(Usuario usuario, Guid sesionId, Guid familiaToken, IReadOnlyList<string> roles)
     {
-        var (accessToken, _, accessExpiraEn) = tokenService.GenerarAccessToken(usuario, roles);
+        var (accessToken, _, accessExpiraEn) = tokenService.GenerarAccessToken(usuario, roles, sesionId);
         var (refreshCrudo, refreshExpiraEn) = tokenService.GenerarRefreshTokenCrudo();
 
         db.RefreshTokens.Add(new RefreshToken

@@ -14,7 +14,11 @@ public class TokenService(IOptions<JwtSettings> jwtOptions)
 {
     private readonly JwtSettings _jwt = jwtOptions.Value;
 
-    public (string Token, string Jti, DateTime ExpiraEn) GenerarAccessToken(Usuario usuario, IReadOnlyList<string> roles)
+    // Claim con el Id de la sesión: el middleware de Program.cs lo usa para aplicar
+    // la inactividad y la duración máxima de la sesión en cada petición.
+    public const string ClaimSesion = "sid";
+
+    public (string Token, string Jti, DateTime ExpiraEn) GenerarAccessToken(Usuario usuario, IReadOnlyList<string> roles, Guid sesionId)
     {
         var jti = Guid.NewGuid().ToString();
         var expiraEn = DateTime.UtcNow.AddMinutes(_jwt.AccessTokenMinutes);
@@ -25,6 +29,7 @@ public class TokenService(IOptions<JwtSettings> jwtOptions)
             new(JwtRegisteredClaimNames.Jti, jti),
             new(ClaimTypes.Email, usuario.Email),
             new(ClaimTypes.Name, usuario.Nombre),
+            new(ClaimSesion, sesionId.ToString()),
         };
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
