@@ -246,6 +246,7 @@ public class AuthService(RpsDbContext db, TokenService tokenService, IOptions<Jw
             .Join(db.Roles.Where(r => r.Activo), ur => ur.RolId, r => r.Id, (ur, r) => r.Nombre)
             .ToListAsync(ct);
 
+    // Solo se exige el largo mínimo: no es obligatorio poner números ni caracteres especiales.
     private static bool EsPasswordValida(string password) =>
-        password.Length >= 10 && password.Any(char.IsLetter) && password.Any(char.IsDigit);
+        password.Length >= 10;
 }

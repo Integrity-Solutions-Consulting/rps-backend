@@ -23,7 +23,7 @@ public static class AuthErrores
         Error.Validacion("Auth.PasswordActualIncorrecta", "passwordActual", "La contraseña actual no es correcta.");
 
     public static readonly Error PasswordInvalida =
-        Error.Validacion("Auth.PasswordInvalida", "password", "La contraseña debe tener al menos 10 caracteres, con letras y números.");
+        Error.Validacion("Auth.PasswordInvalida", "password", "La contraseña debe tener al menos 10 caracteres.");
 
     public static readonly Error RolInvalido =
         Error.Validacion("Auth.RolInvalido", "rol", "El rol indicado no existe.");
