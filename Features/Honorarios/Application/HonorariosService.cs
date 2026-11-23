@@ -127,6 +127,20 @@ public class HonorariosService(RpsDbContext db)
         foreach (var condicion in condicionesVigentes)
         {
             var diasReconocidos = diasPorCondicion[condicion.Id].Count;
+
+            // ── Descuento de dinero por días descontados: DESACTIVADO A PROPÓSITO ──
+            // No se usa todavía. Queda listo por si Contabilidad pide descontar dinero por los días
+            // que se descuenten en "Rol a pagar" (apartado "Días y observaciones", aún no implementado).
+            // Por ahora los días descontados solo se registran: no cambian el valor a pagar ni salen
+            // en las exportaciones. Para activarlo, descomentar estas líneas (y crear el origen de
+            // diasDescontados, p. ej. una tabla por colaborador y período):
+            //
+            //   var diasDescontados = descuentosDias.GetValueOrDefault((condicion.ColaboradorId, periodo));
+            //   diasReconocidos = Math.Max(0, diasReconocidos - diasDescontados);
+            //
+            // El valor de cada día sale del mismo prorrateo de siempre: ImporteMensual / diasReales.
+            // Ej.: $200 al mes, 30 días, 2 descontados → $200 / 30 × 28 = $186,67 (−$13,33).
+
             var proporcionalAcordado = Math.Round(
                 condicion.ImporteMensual / diasReales * diasReconocidos, 2, MidpointRounding.AwayFromZero);
             var generaHonorario = diasReconocidos > 0 && proporcionalAcordado > 0;

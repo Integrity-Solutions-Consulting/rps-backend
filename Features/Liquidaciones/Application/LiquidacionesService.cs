@@ -46,8 +46,33 @@ public class LiquidacionesService(RpsDbContext db)
             .Where(l => netoPorLiquidacion.GetValueOrDefault(l.Id, 0m) != l.NetoConsolidado)
             .Select(l => l.ColaboradorId);
 
+        // Factura del mes (ver PlazoFactura): vencido el día 7, quien no la entregó a tiempo cobra todo
+        // a fin de mes. Sus liquidaciones que todavía tienen quincena se recalculan aunque no haya nada nuevo.
+        var ahoraEcuador = HoraEcuador.Ahora;
+        var controlFacturaVencido = PlazoFactura.Aplica(periodo) && ahoraEcuador >= PlazoFactura.CierreATiempo(periodo);
+        var facturaATiempo = new HashSet<Guid>();
+        var quincenasPorAjustar = new List<Guid>();
+        if (controlFacturaVencido)
+        {
+            facturaATiempo = (await db.ControlesMensuales.AsNoTracking()
+                    .Where(c => c.Periodo == periodo && c.FacturaRecibidaEn != null)
+                    .Select(c => new { c.ColaboradorId, c.FacturaRecibidaEn })
+                    .ToListAsync(ct))
+                .Where(c => PlazoFactura.EsATiempo(periodo, c.FacturaRecibidaEn))
+                .Select(c => c.ColaboradorId)
+                .ToHashSet();
+            quincenasPorAjustar = (await db.Liquidaciones.AsNoTracking()
+                    .Where(l => l.Periodo == periodo)
+                    .Join(db.Cortes.AsNoTracking().Where(c => c.Tipo == TipoCorte.Quincena), l => l.Id, c => c.LiquidacionId, (l, c) => l.ColaboradorId)
+                    .ToListAsync(ct))
+                .Where(id => !facturaATiempo.Contains(id))
+                .ToList();
+        }
+        bool SinQuincenaPorFactura(Guid colaboradorId) => controlFacturaVencido && !facturaATiempo.Contains(colaboradorId);
+
         var colaboradorIds = honorariosNuevos.Select(h => h.ColaboradorId)
             .Concat(colaboradoresDescuadrados)
+            .Concat(quincenasPorAjustar)
             .Distinct().ToList();
 
         if (colaboradorIds.Count == 0)
@@ -184,6 +209,10 @@ public class LiquidacionesService(RpsDbContext db)
                 honorario.LiquidacionId = liquidacion!.Id;
 
             var frecuencia = frecuenciaPorColaborador.GetValueOrDefault(colaboradorId, Frecuencia.FinDeMes);
+            // Sin factura a tiempo (y ya vencido el día 7): este mes se paga como si cobrara solo a fin de mes.
+            var quincenaQuitadaPorFactura = frecuencia == Frecuencia.DosPagos && SinQuincenaPorFactura(colaboradorId);
+            if (quincenaQuitadaPorFactura)
+                frecuencia = Frecuencia.FinDeMes;
             // Desde cuándo trabajó en el período: por proyecto, la entrada a la asignación; por
             // contrato, el inicio del contrato (los proyectos no cuentan). Sirve para RN 26.
             var honorariosDelColaborador = previosDelColaborador.Concat(grupo).ToList();
@@ -205,6 +234,16 @@ public class LiquidacionesService(RpsDbContext db)
             foreach (var corte in cortesCalculados)
                 corte.RecuperacionAdicional = recuperacionPorColaboradorYCorte.GetValueOrDefault((colaboradorId, corte.Tipo), 0m);
 
+            // Si se le quitó la quincena por la factura, la cuota de anticipo programada en la quincena
+            // se cobra a fin de mes (no se pierde).
+            if (quincenaQuitadaPorFactura)
+            {
+                var cuotaQuincena = recuperacionPorColaboradorYCorte.GetValueOrDefault((colaboradorId, TipoCorte.Quincena), 0m);
+                var finDeMes = cortesCalculados.FirstOrDefault(c => c.Tipo == TipoCorte.FinDeMes);
+                if (cuotaQuincena > 0 && finDeMes is not null)
+                    finDeMes.RecuperacionAdicional += cuotaQuincena;
+            }
+
             if (!yaExistia)
             {
                 foreach (var corte in cortesCalculados)
@@ -217,6 +256,10 @@ public class LiquidacionesService(RpsDbContext db)
             else
             {
                 var cortesExistentes = await db.Cortes.Where(c => c.LiquidacionId == liquidacion!.Id).ToListAsync(ct);
+
+                if (quincenaQuitadaPorFactura && cortesExistentes.Any(c => c.Tipo == TipoCorte.Quincena))
+                    liquidacion!.RegistrarModificacion(
+                        $"Sin factura hasta el día {PlazoFactura.DiaLimite}: la quincena pasó a fin de mes");
 
                 foreach (var calculado in cortesCalculados)
                 {

@@ -34,6 +34,7 @@ public class RpsDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Honorario> Honorarios => Set<Honorario>();
     public DbSet<Liquidacion> Liquidaciones => Set<Liquidacion>();
     public DbSet<rps_backend.Features.Liquidaciones.Domain.Corte> Cortes => Set<rps_backend.Features.Liquidaciones.Domain.Corte>();
+    public DbSet<rps_backend.Features.Liquidaciones.Domain.ControlMensual> ControlesMensuales => Set<rps_backend.Features.Liquidaciones.Domain.ControlMensual>();
     public DbSet<AnticipoAdicional> AnticiposAdicionales => Set<AnticipoAdicional>();
     public DbSet<CuotaRecuperacion> CuotasRecuperacion => Set<CuotaRecuperacion>();
     public DbSet<Prestamo> Prestamos => Set<Prestamo>();

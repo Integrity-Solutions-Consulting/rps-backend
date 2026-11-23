@@ -1199,6 +1199,63 @@ namespace rps_backend.Migrations
                     b.ToTable("cambio_tmr", "rps");
                 });
 
+            modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.ControlMensual", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ColaboradorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("colaborador_id");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<DateTime?>("DiasActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dias_actualizado_en");
+
+                    b.Property<Guid?>("DiasActualizadoPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dias_actualizado_por_usuario_id");
+
+                    b.Property<int>("DiasDescontados")
+                        .HasColumnType("integer")
+                        .HasColumnName("dias_descontados");
+
+                    b.Property<Guid?>("FacturaMarcadaPorUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("factura_marcada_por_usuario_id");
+
+                    b.Property<DateTime?>("FacturaRecibidaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("factura_recibida_en");
+
+                    b.Property<string>("Observaciones")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("observaciones");
+
+                    b.Property<DateOnly>("Periodo")
+                        .HasColumnType("date")
+                        .HasColumnName("periodo");
+
+                    b.HasKey("Id")
+                        .HasName("pk_control_mensual");
+
+                    b.HasIndex("ColaboradorId", "Periodo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_control_mensual_colaborador_id_periodo");
+
+                    b.ToTable("control_mensual", "rps", t =>
+                        {
+                            t.HasCheckConstraint("ck_control_mensual_dias_descontados", "dias_descontados >= 0 AND dias_descontados <= 31");
+                        });
+                });
+
             modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.Corte", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1769,6 +1826,16 @@ namespace rps_backend.Migrations
                         .HasForeignKey("ProyectoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_cambio_tmr_proyectos_proyecto_id");
+                });
+
+            modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.ControlMensual", b =>
+                {
+                    b.HasOne("rps_backend.Features.Colaboradores.Domain.ColaboradorRps", null)
+                        .WithMany()
+                        .HasForeignKey("ColaboradorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_control_mensual_colaborador_rps_colaborador_id");
                 });
 
             modelBuilder.Entity("rps_backend.Features.Liquidaciones.Domain.Corte", b =>

@@ -120,6 +120,7 @@ builder.Services.AddScoped<AsignacionesService>();
 builder.Services.AddScoped<HonorariosService>();
 builder.Services.AddScoped<CondicionesEconomicasService>();
 builder.Services.AddScoped<LiquidacionesService>();
+builder.Services.AddScoped<FacturacionService>();
 builder.Services.AddScoped<AnticiposService>();
 builder.Services.AddScoped<PrestamosService>();
 builder.Services.AddScoped<ConfiguracionService>();

@@ -32,6 +32,30 @@ public static class LiquidacionesEndpoints
             .Produces<LiquidacionResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        // ── Rol a pagar: factura del mes, días descontados y observaciones (ver PlazoFactura) ──
+        // GET /api/liquidaciones/facturacion?periodo=2026-12-01
+        group.MapGet("/facturacion", async (DateOnly? periodo, FacturacionService service, CancellationToken ct) =>
+                (await service.ObtenerAsync(periodo, ct)).AHttp(TypedResults.Ok))
+            .Produces<FacturacionPeriodoResponse>()
+            .ProducesValidationProblem();
+
+        group.MapPost("/facturacion/{colaboradorId:guid}/factura", async (Guid colaboradorId, MarcarFacturaRequest request, ClaimsPrincipal user, FacturacionService service, CancellationToken ct) =>
+                (await service.MarcarFacturaAsync(colaboradorId, request, Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!), ct)).AHttp(TypedResults.Ok))
+            .Produces<ControlMensualResponse>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // DELETE /api/liquidaciones/facturacion/{colaboradorId}/factura?periodo=2026-12-01
+        group.MapDelete("/facturacion/{colaboradorId:guid}/factura", async (Guid colaboradorId, DateOnly? periodo, FacturacionService service, CancellationToken ct) =>
+                (await service.QuitarFacturaAsync(colaboradorId, periodo, ct)).AHttp(TypedResults.Ok))
+            .Produces<ControlMensualResponse>()
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        group.MapPut("/facturacion/{colaboradorId:guid}/dias", async (Guid colaboradorId, GuardarDiasRequest request, ClaimsPrincipal user, FacturacionService service, CancellationToken ct) =>
+                (await service.GuardarDiasAsync(colaboradorId, request, Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!), ct)).AHttp(TypedResults.Ok))
+            .Produces<ControlMensualResponse>()
+            .ProducesValidationProblem();
+
         return app;
     }
 }
