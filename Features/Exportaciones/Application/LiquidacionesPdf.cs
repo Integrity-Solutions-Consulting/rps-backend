@@ -10,7 +10,15 @@ public record FilaLiquidacionPdf(
     string Colaborador, string? Identificacion, string? Clasificacion, DateOnly Periodo,
     decimal NetoConsolidado, decimal Quincena, decimal FinDeMes, decimal RecuperacionAnticipos, decimal DescuentoPrestamos, decimal APagar, bool Revisado,
     IReadOnlyList<DetalleHonorarioPdf> Honorarios, IReadOnlyList<DetalleCortePdf> Cortes,
-    decimal SaldoPrestamos = 0m);
+    decimal SaldoPrestamos = 0m, IReadOnlyList<string>? ObservacionesRegistradas = null)
+{
+    // Lo que el colaborador recibe en el mes: el total neto a pagar más los anticipos que ya se le entregaron
+    // (que se descuentan en los cortes). Muestra que se le paga todo lo que le corresponde.
+    public decimal TotalPagadoMes => APagar + RecuperacionAnticipos;
+
+    // Observaciones de Rol a pagar, Anticipos y Préstamos que corresponden a esta liquidación.
+    public IReadOnlyList<string> Observaciones => ObservacionesRegistradas ?? [];
+}
 
 // Un honorario de la liquidación: un proyecto (pago por proyecto) o el contrato (pago por contrato).
 public record DetalleHonorarioPdf(
@@ -65,6 +73,7 @@ public static class LiquidacionesPdf
                 if (r.Vista == VistaLiquidaciones.Consolidado)
                 {
                     col.Item().Element(c => Tabla(c, r, porMes));
+                    col.Item().Element(c => ObservacionesConsolidado(c, r, porMes));
                     return;
                 }
 
@@ -156,6 +165,7 @@ public static class LiquidacionesPdf
                 cols.RelativeColumn(1.5f);     // Recuperación
                 cols.RelativeColumn(1.4f);     // Préstamos
                 cols.RelativeColumn(1.5f);     // A pagar
+                cols.RelativeColumn(1.5f);     // Total pagado en el mes
                 cols.RelativeColumn(1.1f);     // Revisado
             });
 
@@ -172,6 +182,7 @@ public static class LiquidacionesPdf
                 Cabecera(h.Cell(), "Recup. anticipos", derecha: true);
                 Cabecera(h.Cell(), "Abono préstamo", derecha: true);
                 Cabecera(h.Cell(), "Neto a pagar", derecha: true);
+                Cabecera(h.Cell(), "Total pagado (con anticipos)", derecha: true);
                 Cabecera(h.Cell(), "Revisado");
             });
 
@@ -190,6 +201,7 @@ public static class LiquidacionesPdf
                 Celda(t.Cell(), f.RecuperacionAnticipos == 0 ? "—" : Monto(f.RecuperacionAnticipos), derecha: true);
                 Celda(t.Cell(), f.DescuentoPrestamos == 0 ? "—" : Monto(f.DescuentoPrestamos), derecha: true);
                 Celda(t.Cell(), Monto(f.APagar), derecha: true, negrita: true);
+                Celda(t.Cell(), Monto(f.TotalPagadoMes), derecha: true);
                 Celda(t.Cell(), f.Revisado ? "Sí" : "Pendiente");
             }
 
@@ -201,7 +213,26 @@ public static class LiquidacionesPdf
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.RecuperacionAnticipos))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.DescuentoPrestamos))).Bold();
             t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.APagar))).Bold().FontColor(Verde);
+            t.Cell().Element(Total).AlignRight().Text(Monto(r.Filas.Sum(f => f.TotalPagadoMes))).Bold();
             t.Cell().Element(Total);
+        });
+    }
+
+    // Debajo del consolidado: las observaciones de cada colaborador (solo si alguno tiene).
+    private static void ObservacionesConsolidado(IContainer c, ReporteLiquidacionesPdf r, bool porMes)
+    {
+        var conObservaciones = r.Filas.Where(f => f.Observaciones.Count > 0).ToList();
+        if (conObservaciones.Count == 0) return;
+
+        c.PaddingTop(14).Column(col =>
+        {
+            col.Item().BorderBottom(1).BorderColor(Marino).PaddingBottom(3).Text("Observaciones").FontSize(10.5f).Bold().FontColor(Marino);
+            foreach (var f in conObservaciones)
+            {
+                col.Item().PaddingTop(5).Text($"{f.Colaborador}{(porMes ? " · " + NombreMes(f.Periodo) : "")}").Bold();
+                foreach (var o in f.Observaciones)
+                    col.Item().PaddingLeft(10).Text($"• {o}");
+            }
         });
     }
 
@@ -302,6 +333,13 @@ public static class LiquidacionesPdf
                 row.AutoItem().Text(Monto(f.APagar)).Bold().FontColor(Verde);
             });
 
+            // Total neto a pagar + anticipos ya entregados: lo que recibe en total en el mes.
+            col.Item().PaddingTop(3).Width(510).Row(row =>
+            {
+                row.RelativeItem().Text("Total pagado en el mes (neto a pagar + anticipos entregados)").Bold().FontColor(Marino);
+                row.AutoItem().Text(Monto(f.TotalPagadoMes)).Bold();
+            });
+
             // Préstamo: solo si el colaborador tiene uno (abonó este mes o todavía le queda saldo).
             if (f.DescuentoPrestamos > 0 || f.SaldoPrestamos > 0)
             {
@@ -318,6 +356,17 @@ public static class LiquidacionesPdf
                         row.RelativeItem().Text("Saldo pendiente del préstamo");
                         row.AutoItem().Text(Monto(f.SaldoPrestamos)).Bold();
                     });
+                });
+            }
+
+            // Observaciones registradas en Rol a pagar, Anticipos y Préstamos.
+            if (f.Observaciones.Count > 0)
+            {
+                col.Item().PaddingTop(6).Width(510).Background(FondoCabecera).Padding(5).Column(o =>
+                {
+                    o.Item().Text("Observaciones").Bold().FontColor(Marino);
+                    foreach (var texto in f.Observaciones)
+                        o.Item().Text($"• {texto}");
                 });
             }
         });

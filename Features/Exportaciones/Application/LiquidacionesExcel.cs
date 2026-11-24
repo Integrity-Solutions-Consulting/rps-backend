@@ -90,6 +90,11 @@ public static class LiquidacionesExcel
             total.Style.Border.SetTopBorder(XLBorderStyleValues.Medium).Border.SetTopBorderColor(Marino);
             fila++;
 
+            // Total neto a pagar + anticipos ya entregados: lo que recibe en total en el mes.
+            Escribir(hoja, fila, ["Total pagado en el mes (neto a pagar + anticipos entregados)", null, null, null, null, f.TotalPagadoMes]);
+            hoja.Range(fila, 1, fila, EncabezadosCortes.Length).Style.Font.SetBold();
+            fila++;
+
             // Préstamo: solo si el colaborador tiene uno (abonó este mes o todavía le queda saldo).
             if (f.DescuentoPrestamos > 0 || f.SaldoPrestamos > 0)
             {
@@ -99,6 +104,24 @@ public static class LiquidacionesExcel
                 Escribir(hoja, fila++, ["Abono de este mes", null, null, null, null, f.DescuentoPrestamos]);
                 Escribir(hoja, fila, ["Saldo pendiente del préstamo", null, null, null, null, f.SaldoPrestamos]);
                 hoja.Cell(fila++, EncabezadosCortes.Length).Style.Font.SetBold();
+            }
+
+            // Observaciones registradas en Rol a pagar, Anticipos y Préstamos.
+            if (f.Observaciones.Count > 0)
+            {
+                fila++;
+                hoja.Cell(fila, 1).Value = "Observaciones";
+                hoja.Cell(fila++, 1).Style.Font.SetBold().Font.SetFontColor(Marino);
+                foreach (var texto in f.Observaciones)
+                {
+                    // Celda combinada a lo ancho del bloque, con ajuste de texto, para que no estire la columna A.
+                    hoja.Cell(fila, 1).Value = texto;
+                    var rango = hoja.Range(fila, 1, fila, EncabezadosHonorarios.Length);
+                    rango.Merge();
+                    rango.Style.Alignment.SetWrapText().Alignment.SetVertical(XLAlignmentVerticalValues.Top);
+                    hoja.Row(fila).Height = Math.Max(15, Math.Ceiling(texto.Length / 150.0) * 15);
+                    fila++;
+                }
             }
 
             fila += 2; // espacio antes del siguiente colaborador

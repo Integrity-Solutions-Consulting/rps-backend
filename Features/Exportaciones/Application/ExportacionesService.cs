@@ -27,7 +27,7 @@ public class ExportacionesService(RpsDbContext db)
              "Total de retenciones", "Neto"],
             filas.Select(f => new object?[]
             {
-                NombreColaborador(f.Nombres, f.Apellidos, f.TmrColaboradorId), f.Identificacion, f.Proyecto, ReportesPdf.NombreMes(f.Periodo),
+                NombreColaborador(f.Nombres, f.Apellidos), f.Identificacion, f.Proyecto, ReportesPdf.NombreMes(f.Periodo),
                 f.Modalidad == Modalidad.MasIva ? "Más IVA" : "Neto", f.DiasReconocidos, f.DiasReales,
                 f.ProporcionalAcordado, f.Subtotal, f.Iva, f.TotalDocumento, f.RetencionFuente, f.RetencionIva, f.TotalRetenciones, f.Neto
             }).ToList(),
@@ -58,7 +58,7 @@ public class ExportacionesService(RpsDbContext db)
 
         var filasPdf = filas.Select(f =>
         {
-            var celdas = new List<string> { NombreColaborador(f.Nombres, f.Apellidos, f.TmrColaboradorId), f.Proyecto };
+            var celdas = new List<string> { NombreColaborador(f.Nombres, f.Apellidos), f.Proyecto };
             if (todos) celdas.Add(ReportesPdf.NombreMes(f.Periodo));
             celdas.AddRange([
                 $"{f.DiasReconocidos}/{f.DiasReales}", f.Modalidad == Modalidad.MasIva ? "Más IVA" : "Neto",
@@ -111,15 +111,17 @@ public class ExportacionesService(RpsDbContext db)
             var resumen = new HojaExcel(
                 "Consolidado", "Rol a pagar · Consolidado", subtitulo,
                 ["Colaborador", "Identificación", "Clasificación", "Período", "Neto consolidado", "Quincena", "Fin de mes",
-                 "Cuotas de anticipos", "Abono a préstamos", "Total neto a pagar", "Revisada"],
+                 "Cuotas de anticipos", "Abono a préstamos", "Total neto a pagar", "Total pagado en el mes (con anticipos)", "Revisada", "Observaciones"],
                 liquidaciones.Select(l => new object?[]
                 {
                     l.Colaborador, l.Identificacion, l.Clasificacion ?? "Sin clasificar", ReportesPdf.NombreMes(l.Periodo),
-                    l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.DescuentoPrestamos, l.APagar, l.Revisado ? "Sí" : "Pendiente"
+                    l.NetoConsolidado, l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.DescuentoPrestamos, l.APagar,
+                    l.TotalPagadoMes, l.Revisado ? "Sí" : "Pendiente",
+                    l.Observaciones.Count == 0 ? null : string.Join(" | ", l.Observaciones)
                 }).ToList(),
                 ["Totales", null, null, null, liquidaciones.Sum(l => l.NetoConsolidado), liquidaciones.Sum(l => l.Quincena),
                  liquidaciones.Sum(l => l.FinDeMes), liquidaciones.Sum(l => l.RecuperacionAnticipos), liquidaciones.Sum(l => l.DescuentoPrestamos),
-                 liquidaciones.Sum(l => l.APagar), null],
+                 liquidaciones.Sum(l => l.APagar), liquidaciones.Sum(l => l.TotalPagadoMes), null, null],
                 "No hay liquidaciones para este período.");
             contenido = ReportesExcel.Generar(config.RazonSocial, config.Ruc, [resumen]);
         }
@@ -168,16 +170,16 @@ public class ExportacionesService(RpsDbContext db)
     public async Task<(byte[] Contenido, string NombreArchivo)> ExportarColaboradoresPdfAsync(Guid usuarioId, CancellationToken ct)
     {
         var (titulo, subtitulo, encabezados, filas) = await DatosColaboradoresAsync(ct);
-        var anchos = new float[] { 3, 1.6f, 3, 1, 1.3f, 1.5f, 1.4f, 1.2f };
+        var anchos = new float[] { 3, 1.6f, 3, 1.3f, 1.5f, 1.4f, 1.2f };
         var columnas = encabezados.Select((e, i) => new ColumnaPdf(e, anchos[i])).ToList();
-        var activos = filas.Count(f => f[7] == "Activo");
-        var configurados = filas.Count(f => f[6] == "Configurado");
+        var activos = filas.Count(f => f[6] == "Activo");
+        var configurados = filas.Count(f => f[5] == "Configurado");
 
         var config = await db.ConfiguracionGlobal.AsNoTracking().FirstAsync(ct);
         var contenido = ReportesPdf.Generar(new ReporteTablaPdf(
             config.RazonSocial, config.Ruc, titulo, $"Al {HoraEcuador.Hoy:dd/MM/yyyy}", subtitulo,
             DateTime.UtcNow, columnas, filas,
-            [$"Total: {filas.Count}", null, null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
+            [$"Total: {filas.Count}", null, null, null, null, $"{configurados} configurados", $"{activos} activos"],
             "No hay colaboradores registrados."));
 
         await RegistrarAsync(TipoReporte.Colaboradores, null, FormatoReporte.Pdf, null, "colaboradores.pdf",
@@ -201,10 +203,9 @@ public class ExportacionesService(RpsDbContext db)
 
         var filas = colaboradores.Select(c => new[]
         {
-            NombreColaborador(c.Nombres, c.Apellidos, c.TmrColaboradorId),
+            NombreColaborador(c.Nombres, c.Apellidos),
             c.Identificacion ?? "—",
             c.Correo ?? "—",
-            c.TmrColaboradorId,
             c.Clasificacion?.ToString() ?? "Sin clasificar",
             frecuencias.TryGetValue(c.Id, out var frec) ? (frec == Frecuencia.DosPagos ? "Quincena y fin de mes" : "Fin de mes") : "—",
             c.EstadoConfiguracion == EstadoConfiguracion.Configurado ? "Configurado" : "Pendiente",
@@ -215,7 +216,7 @@ public class ExportacionesService(RpsDbContext db)
         var configurados = colaboradores.Count(c => c.EstadoConfiguracion == EstadoConfiguracion.Configurado);
         return ("Colaboradores registrados",
             $"{colaboradores.Count} en total · {activos} activos · {configurados} configurados",
-            ["Colaborador", "Identificación", "Correo", "ID TMR", "Clasificación", "Frecuencia", "Configuración", "Estado"],
+            ["Colaborador", "Identificación", "Correo", "Clasificación", "Frecuencia", "Configuración", "Estado"],
             filas);
     }
 
@@ -324,7 +325,8 @@ public class ExportacionesService(RpsDbContext db)
                 Filas = filas.Select(l => new
                 {
                     l.Colaborador, l.Identificacion, l.Clasificacion, l.Periodo, l.NetoConsolidado,
-                    l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.DescuentoPrestamos, l.APagar, l.Revisado
+                    l.Quincena, l.FinDeMes, l.RecuperacionAnticipos, l.DescuentoPrestamos, l.APagar, l.TotalPagadoMes, l.Revisado,
+                    l.Observaciones
                 })
             });
 
@@ -424,15 +426,57 @@ public class ExportacionesService(RpsDbContext db)
         var colaboradorIds = liquidaciones.Select(l => l.ColaboradorId).Distinct().ToList();
         var prestamos = await db.Prestamos.AsNoTracking()
             .Where(p => colaboradorIds.Contains(p.ColaboradorId))
-            .Select(p => new { p.ColaboradorId, p.Fecha, p.Monto })
+            .Select(p => new { p.Id, p.ColaboradorId, p.Fecha, p.Monto, p.Observaciones })
             .ToListAsync(ct);
         var descontadoPorMes = await db.Liquidaciones.AsNoTracking()
             .Where(l => colaboradorIds.Contains(l.ColaboradorId))
             .Join(db.Cortes.AsNoTracking(), l => l.Id, c => c.LiquidacionId, (l, c) => new { l.ColaboradorId, l.Periodo, c.DescuentoPrestamos })
             .ToListAsync(ct);
 
+        // Observaciones escritas en Rol a pagar (Días y observaciones), Anticipos y Préstamos.
+        //   Rol a pagar: las del mismo colaborador y mes.
+        //   Anticipo: en el mes en que se cobra (sus cuotas) o, si no tiene plan, en el mes en que se registró.
+        //   Préstamo: en el mes en que se entregó y en cada mes en que tiene un cobro.
+        var periodos = liquidaciones.Select(l => l.Periodo).Distinct().ToList();
+        var observacionesRol = (await db.ControlesMensuales.AsNoTracking()
+                .Where(c => colaboradorIds.Contains(c.ColaboradorId) && periodos.Contains(c.Periodo) && c.Observaciones != null)
+                .Select(c => new { c.ColaboradorId, c.Periodo, c.Observaciones })
+                .ToListAsync(ct))
+            .ToDictionary(c => (c.ColaboradorId, c.Periodo), c => c.Observaciones!);
+        var anticiposConObservaciones = await db.AnticiposAdicionales.AsNoTracking()
+            .Where(a => colaboradorIds.Contains(a.ColaboradorId) && a.Observaciones != null)
+            .Select(a => new { a.Id, a.ColaboradorId, a.Fecha, a.Monto, a.Observaciones })
+            .ToListAsync(ct);
+        var anticipoIds = anticiposConObservaciones.Select(a => a.Id).ToList();
+        var mesesDeAnticipo = (await db.CuotasRecuperacion.AsNoTracking()
+                .Where(c => anticipoIds.Contains(c.AnticipoAdicionalId))
+                .Select(c => new { c.AnticipoAdicionalId, c.Periodo })
+                .ToListAsync(ct))
+            .ToLookup(c => c.AnticipoAdicionalId, c => c.Periodo);
+        var prestamoIds = prestamos.Where(p => p.Observaciones != null).Select(p => p.Id).ToList();
+        var mesesDePrestamo = (await db.CuotasPrestamo.AsNoTracking()
+                .Where(c => prestamoIds.Contains(c.PrestamoId))
+                .Select(c => new { c.PrestamoId, c.Periodo })
+                .ToListAsync(ct))
+            .ToLookup(c => c.PrestamoId, c => c.Periodo);
+        static DateOnly MesDe(DateOnly fecha) => new(fecha.Year, fecha.Month, 1);
+
         return liquidaciones.Select(l =>
         {
+            var observaciones = new List<string>();
+            if (observacionesRol.TryGetValue((l.ColaboradorId, l.Periodo), out var obsRol))
+                observaciones.Add($"Rol a pagar: {obsRol}");
+            foreach (var a in anticiposConObservaciones
+                         .Where(a => a.ColaboradorId == l.ColaboradorId &&
+                                     (mesesDeAnticipo[a.Id].Any() ? mesesDeAnticipo[a.Id].Contains(l.Periodo) : MesDe(a.Fecha) == l.Periodo))
+                         .OrderBy(a => a.Fecha))
+                observaciones.Add($"Anticipo del {a.Fecha:dd/MM/yyyy} ({ReportesPdf.Monto(a.Monto)}): {a.Observaciones}");
+            foreach (var p in prestamos
+                         .Where(p => p.ColaboradorId == l.ColaboradorId && p.Observaciones != null &&
+                                     (MesDe(p.Fecha) == l.Periodo || mesesDePrestamo[p.Id].Contains(l.Periodo)))
+                         .OrderBy(p => p.Fecha))
+                observaciones.Add($"Préstamo del {p.Fecha:dd/MM/yyyy} ({ReportesPdf.Monto(p.Monto)}): {p.Observaciones}");
+
             var deLaLiquidacion = cortes.GetValueOrDefault(l.Id) ?? [];
             var finDelMes = l.Periodo.AddMonths(1).AddDays(-1);
             var prestado = prestamos.Where(p => p.ColaboradorId == l.ColaboradorId && p.Fecha <= finDelMes).Sum(p => p.Monto);
@@ -448,7 +492,7 @@ public class ExportacionesService(RpsDbContext db)
                 c.ValorBase, c.RecuperacionAdicional, c.DescuentoPrestamos, c.ValorPreparado)).ToList();
 
             return new FilaLiquidacionPdf(
-                string.IsNullOrEmpty(nombre) ? $"ID TMR {l.TmrColaboradorId}" : nombre,
+                string.IsNullOrEmpty(nombre) ? SinNombre : nombre,
                 l.Identificacion,
                 l.Clasificacion?.ToString(),
                 l.Periodo,
@@ -461,13 +505,17 @@ public class ExportacionesService(RpsDbContext db)
                 l.Revisado,
                 honorarios.GetValueOrDefault(l.Id) ?? [],
                 detalleCortes,
-                saldoPrestamos);
+                saldoPrestamos,
+                observaciones);
         }).ToList();
     }
 
-    private static string NombreColaborador(string? nombres, string? apellidos, string tmrColaboradorId)
+    // Sin nombre en RPS: se indica así (el ID de TMR no se muestra en los reportes).
+    private const string SinNombre = "Sin nombre registrado";
+
+    private static string NombreColaborador(string? nombres, string? apellidos)
     {
         var nombre = $"{nombres} {apellidos}".Trim();
-        return string.IsNullOrEmpty(nombre) ? $"ID TMR {tmrColaboradorId}" : nombre;
+        return string.IsNullOrEmpty(nombre) ? SinNombre : nombre;
     }
 }
