@@ -162,7 +162,7 @@ public static class LiquidacionesPdf
                 cols.RelativeColumn(1.5f);     // Neto consolidado
                 cols.RelativeColumn(1.3f);     // Quincena
                 cols.RelativeColumn(1.3f);     // Fin de mes
-                cols.RelativeColumn(1.5f);     // Recuperación
+                cols.RelativeColumn(1.5f);     // Total anticipos
                 cols.RelativeColumn(1.4f);     // Préstamos
                 cols.RelativeColumn(1.5f);     // A pagar
                 cols.RelativeColumn(1.5f);     // Total pagado en el mes
@@ -179,7 +179,7 @@ public static class LiquidacionesPdf
                 Cabecera(h.Cell(), "Neto consolidado", derecha: true);
                 Cabecera(h.Cell(), "Quincena", derecha: true);
                 Cabecera(h.Cell(), "Fin de mes", derecha: true);
-                Cabecera(h.Cell(), "Recup. anticipos", derecha: true);
+                Cabecera(h.Cell(), "Total anticipos", derecha: true);
                 Cabecera(h.Cell(), "Abono préstamo", derecha: true);
                 Cabecera(h.Cell(), "Neto a pagar", derecha: true);
                 Cabecera(h.Cell(), "Total pagado (con anticipos)", derecha: true);
